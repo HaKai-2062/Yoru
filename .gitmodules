@@ -1,0 +1,31 @@
+[submodule "Yoru/vendor/glfw"]
+	path = Yoru/vendor/glfw
+	url = https://github.com/glfw/glfw.git
+[submodule "Yoru/vendor/imgui"]
+	path = Yoru/vendor/imgui
+	url = https://github.com/ocornut/imgui.git
+	branch = docking
+[submodule "Yoru/vendor/glm"]
+	path = Yoru/vendor/glm
+	url = https://github.com/g-truc/glm.git
+[submodule "Yoru/vendor/stb"]
+	path = Yoru/vendor/stb
+	url = https://github.com/nothings/stb.git
+[submodule "Yoru/vendor/tinyobjloader"]
+	path = Yoru/vendor/tinyobjloader
+	url = https://github.com/tinyobjloader/tinyobjloader.git
+[submodule "Yoru/vendor/vk-bootstrap"]
+	path = Yoru/vendor/vk-bootstrap
+	url = https://github.com/charles-lunarg/vk-bootstrap.git
+[submodule "Yoru/vendor/VulkanMemoryAllocator"]
+	path = Yoru/vendor/VulkanMemoryAllocator
+	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
+[submodule "Yoru/vendor/fmt"]
+	path = Yoru/vendor/fmt
+	url = https://github.com/fmtlib/fmt.git
+[submodule "Yoru/vendor/fastgltf"]
+	path = Yoru/vendor/fastgltf
+	url = https://github.com/spnda/fastgltf.git
+[submodule "Yoru/vendor/simdjson"]
+	path = Yoru/vendor/simdjson
+	url = https://github.com/simdjson/simdjson.git
