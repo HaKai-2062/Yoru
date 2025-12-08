@@ -4,6 +4,7 @@
 #include <string>
 
 #include "Yoru/Core/BackEndWindow.h"
+#include "Yoru/Renderer/RendererAPI.h"
 #include "Input.h"
 
 namespace Yoru
@@ -33,6 +34,7 @@ namespace Yoru
 
 		bool m_Running = true;
 		bool m_Minimized = false;
+		std::unique_ptr<RendererAPI> m_Renderer;
 
 		static Application* s_Application;
 	};

@@ -29,6 +29,7 @@ option(GLFW_BUILD_TESTS "Build the GLFW test programs" OFF)
 option(GLFW_BUILD_DOCS "Build the GLFW documentation" OFF)
 option(GLFW_INSTALL "Generate installation target" OFF)
 option(GLFW_DOCUMENT_INTERNALS "Include internals in documentation" OFF)
+
 set(BUILD_SHARED_LIBS OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(Yoru/vendor/simdjson)
@@ -37,11 +38,23 @@ add_subdirectory(Yoru/vendor/fmt)
 add_subdirectory(Yoru/vendor/GLFW)
 add_subdirectory(Yoru/vendor/glm)
 add_subdirectory(Yoru/vendor/MissingCMake/imgui)
+add_subdirectory(Yoru/vendor/MissingCMake/glad)
+add_subdirectory(Yoru/vendor/MissingCMake/stb)
 add_subdirectory(Yoru/vendor/libktx)
-#add_subdirectory(Yoru/vendor/stb)
 add_subdirectory(Yoru/vendor/tinyobjloader)
 add_subdirectory(Yoru/vendor/vk-bootstrap)
 add_subdirectory(Yoru/vendor/VulkanMemoryAllocator)
+
+set_target_properties(simdjson fastgltf fmt glfw glm imgui glad stb libktx tinyobjloader vk-bootstrap VulkanMemoryAllocator
+    PROPERTIES FOLDER "Dependencies"
+)
+if(TARGET uninstall)
+    set_target_properties(uninstall PROPERTIES FOLDER "_Hidden")
+endif()
+
+if (TARGET update_mappings)
+	set_target_properties(update_mappings PROPERTIES FOLDER "_Hidden")
+endif()
 
 add_subdirectory(Yoru)
 add_subdirectory(YoruSandbox)

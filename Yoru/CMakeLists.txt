@@ -52,15 +52,16 @@ target_compile_definitions("${PROJECT_NAME}" PUBLIC
 	GLM_FORCE_DEPTH_ZERO_TO_ONE=1
 	GLM_ENABLE_EXPERIMENTAL=1
 	VK_PROTOTYPES=1
+	YORU_VALIDATION_LAYERS=1
 	SHADER_PATH="${CMAKE_SOURCE_DIR}/shaders/spirv/"
 	ASSET_PATH="${CMAKE_SOURCE_DIR}/assets/")
 
 target_include_directories("${PROJECT_NAME}" PUBLIC 
+	"${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm/"
 	"${CMAKE_CURRENT_SOURCE_DIR}/src/")
 #	"${CMAKE_SOURCE_DIR}/vendor/GLFW/include/"
 #	"${CMAKE_SOURCE_DIR}/vendor/imgui/"
 #	"${CMAKE_SOURCE_DIR}/vendor/imgui/backends/"
-#	"${CMAKE_SOURCE_DIR}/vendor/glm/glm/"
 #	"${CMAKE_SOURCE_DIR}/vendor/stb/"
 #	"${CMAKE_SOURCE_DIR}/vendor/tinyobjloader/"
 #	"${CMAKE_SOURCE_DIR}/vendor/vk-bootstrap/"
@@ -71,11 +72,13 @@ target_include_directories("${PROJECT_NAME}" PUBLIC
 
 target_link_libraries("${PROJECT_NAME}" PRIVATE 
 	glfw
-	imgui
+	glad
 	glm
+	imgui
 	tinyobjloader
 	vk-bootstrap
 	VulkanMemoryAllocator
+	stb
 	fmt
 	fastgltf
 	libktx
@@ -97,3 +100,7 @@ endforeach(GLSL)
 
 add_custom_target(Shaders DEPENDS ${SPIRV_BINARY_FILES})
 add_dependencies(${PROJECT_NAME} Shaders)
+
+if (TARGET Shaders)
+	set_target_properties(Shaders PROPERTIES FOLDER "_Hidden")
+endif()

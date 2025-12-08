@@ -3,8 +3,8 @@ project(imgui)
 
 find_package(Vulkan REQUIRED)
 
-add_library(imgui)
-target_sources(imgui PRIVATE 
+add_library(${PROJECT_NAME})
+target_sources(${PROJECT_NAME} PRIVATE 
 "${CMAKE_CURRENT_SOURCE_DIR}/../../imgui/imgui.cpp"
 "${CMAKE_CURRENT_SOURCE_DIR}/../../imgui/imgui_demo.cpp"
 "${CMAKE_CURRENT_SOURCE_DIR}/../../imgui/imgui_draw.cpp"
@@ -14,6 +14,6 @@ target_sources(imgui PRIVATE
 "${CMAKE_CURRENT_SOURCE_DIR}/../../imgui/backends/imgui_impl_vulkan.cpp"
 )
 
-target_include_directories(imgui PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../imgui/" "${CMAKE_CURRENT_SOURCE_DIR}/../../imgui/backends" "${Vulkan_INCLUDE_DIRS}")
+target_include_directories(${PROJECT_NAME} PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}/../../imgui/" "${CMAKE_CURRENT_SOURCE_DIR}/../../imgui/backends" "${Vulkan_INCLUDE_DIRS}")
 
-target_link_libraries(imgui PUBLIC glfw)
+target_link_libraries(${PROJECT_NAME} PUBLIC glfw)

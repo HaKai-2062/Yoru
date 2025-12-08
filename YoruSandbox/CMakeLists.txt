@@ -17,16 +17,15 @@ else()
 endif()
 
 file(GLOB_RECURSE SANDBOX_SOURCES CONFIGURE_DEPENDS
-    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp"
-)
+    "${CMAKE_CURRENT_SOURCE_DIR}/src/*.cpp")
 file(GLOB_RECURSE SANDBOX CONFIGURE_DEPENDS 
-	"${CMAKE_CURRENT_SOURCE_DIR}/src/*.h"
-)
+	"${CMAKE_CURRENT_SOURCE_DIR}/src/*.h")
 
 add_executable(${PROJECT_NAME} ${SANDBOX_SOURCES} ${SANDBOX_HEADERS})
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT ${PROJECT_NAME})
 
-target_link_libraries(${PROJECT_NAME} PRIVATE Yoru)
-target_include_directories(${PROJECT_NAME} PRIVATE
-    ${CMAKE_SOURCE_DIR}/Yoru/src
-)
+target_include_directories(${PROJECT_NAME} PUBLIC
+    "${CMAKE_SOURCE_DIR}/Yoru/src")
+
+target_link_libraries(${PROJECT_NAME} PRIVATE 
+	Yoru)
