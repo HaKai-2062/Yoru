@@ -63,6 +63,6 @@ namespace Yoru
         void ClearAll();
     };
 
-    std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VKContext* engine, std::string_view filePath);
-    std::optional<AllocatedImage> loadImage(VKContext* engine, fastgltf::Asset& asset, fastgltf::Image& image);
+    std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VKContext* engine, std::string_view fileDir, std::string_view fileName);
+    std::optional<AllocatedImage> loadImage(VKContext* engine, fastgltf::Asset& asset, fastgltf::Image& image, std::string_view assetDir);
 }

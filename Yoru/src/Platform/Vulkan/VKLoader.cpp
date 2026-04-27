@@ -48,20 +48,22 @@ namespace Yoru
 		}
 	}
 
-	std::optional<AllocatedImage> loadImage(VKContext* engine, fastgltf::Asset& asset, fastgltf::Image& image)
+	std::optional<AllocatedImage> loadImage(VKContext* engine, fastgltf::Asset& asset, fastgltf::Image& image, std::string_view assetDir)
 	{
 		AllocatedImage newImage{};
-
+		static uint64_t totalSize = 0;
 		int width, height, nrChannels;
 
-		std::visit(fastgltf::visitor{ [](auto& arg) {},
+		std::visit(fastgltf::visitor{ 
+			[](auto& arg) {},
 			[&](fastgltf::sources::URI& filePath)
 			{
 				assert(filePath.fileByteOffset == 0);	// We don't support offsets with stbi.
 				assert(filePath.uri.isLocalPath());		// We're only capable of loading
 				// local files.
 
-				const std::string path(filePath.uri.path().begin(), filePath.uri.path().end());
+				std::string path(filePath.uri.path().begin(), filePath.uri.path().end());
+				path = std::string(assetDir) + "/" + path;
 
 				unsigned char* data = stbi_load(path.c_str(), &width, &height, &nrChannels, 4);
 				if (data)
@@ -71,8 +73,9 @@ namespace Yoru
 					imagesize.height = height;
 					imagesize.depth = 1;
 
-					newImage = engine->UploadImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
-
+					newImage = engine->UploadImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, false);
+					totalSize += width * height * 4;
+					Log::Write(LogLevel::DEBUG, std::format("Size: {} Loaded Asset: {}", totalSize, path.data()).c_str());
 					stbi_image_free(data);
 				}
 			},
@@ -88,7 +91,7 @@ namespace Yoru
 					imagesize.depth = 1;
 
 					newImage = engine->UploadImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
-
+					Log::Write(LogLevel::DEBUG, "Image loaded from vector");
 					stbi_image_free(data);
 				}
 			},
@@ -104,7 +107,8 @@ namespace Yoru
 					imagesize.depth = 1;
 
 					newImage = engine->UploadImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_USAGE_SAMPLED_BIT, true);
-
+					totalSize += array.bytes.size();
+					Log::Write(LogLevel::DEBUG, "Image loaded from array");
 					stbi_image_free(data);
 				}
 			},
@@ -134,6 +138,7 @@ namespace Yoru
 								newImage = engine->UploadImage(data, imagesize, VK_FORMAT_R8G8B8A8_UNORM,
 									VK_IMAGE_USAGE_SAMPLED_BIT, true);
 
+								Log::Write(LogLevel::DEBUG, "Image loaded from buffer array");
 								stbi_image_free(data);
 							}
 						} },
@@ -154,22 +159,22 @@ namespace Yoru
 		}
 	}
 
-	std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VKContext* engine, std::string_view filePath)
+	std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VKContext* engine, std::string_view fileDir, std::string_view fileName)
 	{
 		std::shared_ptr<LoadedGLTF> scene = std::make_shared<LoadedGLTF>();
 		scene->Engine = engine;
 		LoadedGLTF& file = *scene.get();
 
-		auto data = fastgltf::GltfDataBuffer::FromPath(filePath);
+		std::filesystem::path path = std::filesystem::path(fileDir) / fileName;
+		auto data = fastgltf::GltfDataBuffer::FromPath(path);
 		constexpr auto gltfOptions = fastgltf::Options::DontRequireValidAssetMember | fastgltf::Options::AllowDouble |
-			fastgltf::Options::LoadGLBBuffers | fastgltf::Options::LoadExternalBuffers | fastgltf::Options::LoadExternalImages;
+			fastgltf::Options::LoadGLBBuffers | fastgltf::Options::LoadExternalBuffers;// | fastgltf::Options::LoadExternalImages;
 
 		fastgltf::Asset gltf;
 		fastgltf::Parser parser{};
-		std::filesystem::path path = filePath;
 
 		auto load = parser.loadGltf(data.get(), path.parent_path(), gltfOptions);
-		Log::Write(LogLevel::DEBUG, std::format("Loading GLTF: {} | {}", filePath, load ? "SUCCESS" : "FAIL").c_str());
+		Log::Write(LogLevel::DEBUG, std::format("Loading GLTF: {} | {}", fileName.data(), load ? "SUCCESS" : "FAIL").c_str());
 
 		if (!load)
 			return {};
@@ -210,7 +215,7 @@ namespace Yoru
 		// Load Textures
 		for (fastgltf::Image& image : gltf.images)
 		{
-			std::optional<AllocatedImage> img = loadImage(engine, gltf, image);
+			std::optional<AllocatedImage> img = loadImage(engine, gltf, image, fileDir);
 
 			if (img.has_value())
 			{

@@ -760,10 +760,11 @@ namespace Yoru
 		sampler.minFilter = VK_FILTER_LINEAR;
 		vkCreateSampler(Device, &sampler, nullptr, &DefaultSamplerLinear);
 
-		std::string structurePath = { ASSET_PATH "Sponza/Sponza.gltf" };
-		//std::string structurePath = { ASSET_PATH "structure.glb" };
-		//std::string structurePath = { ASSET_PATH "samplescene.gltf" };
-		auto structureFile = loadGltfScene(this, structurePath);
+		std::string structurePath = { "Sponza.gltf" };
+		//std::string structurePath = { "NewSponza_Main_glTF_003.gltf" };
+		//std::string structurePath = { "structure.glb" };
+		//std::string structurePath = { "samplescene.gltf" };
+		auto structureFile = loadGltfScene(this, ASSET_PATH "Sponza", structurePath);
 		assert(structureFile.has_value());
 		m_LoadedScenes["structure"] = *structureFile;
 
