@@ -1,6 +1,6 @@
 #include "Yoru/Core/Log.h"
 #include "Yoru/Renderer/RendererAPI.h"
-#include "Platform/Vulkan/VKContext.h"
+#include "Platform/Vulkan/VKRenderer.h"
 
 namespace Yoru
 {
@@ -13,7 +13,7 @@ namespace Yoru
 		{
 		case API::Vulkan:
 		{
-			std::unique_ptr<VKContext> Context = std::make_unique<VKContext>();
+			std::unique_ptr<VKRenderer> Context = std::make_unique<VKRenderer>();
 			Context->Init();
 			return std::move(Context);
 		}

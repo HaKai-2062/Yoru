@@ -10,7 +10,7 @@
 #include <fastgltf/util.hpp>
 
 #include "Platform/Vulkan/VKLoader.h"
-#include "Platform/Vulkan/VKContext.h"
+#include "Platform/Vulkan/VKRenderer.h"
 
 namespace Yoru
 {
@@ -48,7 +48,7 @@ namespace Yoru
 		}
 	}
 
-	std::optional<AllocatedImage> loadImage(VKContext* engine, fastgltf::Asset& asset, fastgltf::Image& image, std::string_view assetDir)
+	std::optional<AllocatedImage> loadImage(VKRenderer* engine, fastgltf::Asset& asset, fastgltf::Image& image, std::string_view assetDir)
 	{
 		AllocatedImage newImage{};
 		static uint64_t totalSize = 0;
@@ -159,7 +159,7 @@ namespace Yoru
 		}
 	}
 
-	std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VKContext* engine, std::string_view fileDir, std::string_view fileName)
+	std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VKRenderer* engine, std::string_view fileDir, std::string_view fileName)
 	{
 		std::shared_ptr<LoadedGLTF> scene = std::make_shared<LoadedGLTF>();
 		scene->Engine = engine;

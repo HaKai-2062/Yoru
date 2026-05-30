@@ -10,15 +10,15 @@
 #include "vk_mem_alloc.h"
 #include <VkBootstrap.h>
 
-#include "VKContext.h"
-#include "VKTypes.h"
-#include "VKInitializers.h"
-#include "VKImages.h"
-#include "VKPipelines.h"
 #include "Yoru/Core/Application.h"
 #include "Yoru/Core/Input.h"
 #include "Yoru/Core/Log.h"
-#include "Yoru/ImGui/BackEndImGui.h"
+#include "Yoru/UI/ImGuiLayer.h"
+#include "Platform/Vulkan/VKRenderer.h"
+#include "Platform/Vulkan/VKTypes.h"
+#include "Platform/Vulkan/VKInitializers.h"
+#include "Platform/Vulkan/VKImages.h"
+#include "Platform/Vulkan/VKPipelines.h"
 
 #if YORU_VALIDATION_LAYERS == 1
 static const bool bUseValidationLayers = true;
@@ -28,15 +28,14 @@ static const bool bUseValidationLayers = false;
 
 namespace Yoru
 {
-	VkFormat VKContext::m_SwapchainFormat = {};
 	bool isVisible(const RenderObject& obj, const glm::mat4& viewproj);
 	static VkExtent3D ShadowResolution{ 2048, 2048, 1 };
 
-	void VKContext::Init()
+	void VKRenderer::Init()
 	{
 		Log::Write(LogLevel::INFO, "Application Created");
-		Application* const Application = Yoru::Application::Get();
-		m_BackEndWindow = Application->GetWindow();
+		Application* const app = Yoru::Application::Get();
+		m_BackEndWindow = app->GetWindow();
 		if (!m_BackEndWindow)
 		{
 			Log::Write(LogLevel::ERROR, "Window must be defined before initializing Vulkan");
@@ -49,7 +48,6 @@ namespace Yoru
 		InitSyncStructures();
 		InitDescriptors();
 		InitPipelines();
-		InitImGui();
 		UpdateScene();	// To initialize light data for shadowmaps and descriptors
 		InitDefaultData();
 		InitDepthBuffers();
@@ -57,7 +55,7 @@ namespace Yoru
 		m_IsInitialized = true;
 	}
 
-	void VKContext::Shutdown()
+	void VKRenderer::Shutdown()
 	{
 		if (m_IsInitialized)
 		{
@@ -100,7 +98,7 @@ namespace Yoru
 		}
 	}
 
-	void VKContext::Update()
+	void VKRenderer::Update()
 	{
 		m_Camera.ProcessKeyEvents(m_DeltaTime);
 		m_Camera.ProcessMouseEvents(m_DeltaTime);
@@ -110,15 +108,58 @@ namespace Yoru
 			ResizeSwapchain();
 		}
 
-		BackEndImGui::BeginFrame();
-
 		UpdateDeltaTimeAndTitle();
-		DrawFrame();
+		UpdateScene();
+		BeginFrame();
+		EndFrame();
 	}
 
-	void VKContext::DrawFrame()
+	void VKRenderer::BeginFrame()
 	{
-		UpdateScene();
+		// ImGui BeginFrame
+		Application* const app = Yoru::Application::Get();
+		ImGuiLayer* const imguiLayer = app->GetImGuiLayer();
+		imguiLayer->BeginFrame();
+
+		////some imgui UI to test
+		////ImGui::ShowDemoWindow();
+
+		//if (ImGui::Begin("Main Menu"))
+		//{
+		//	ImGui::SliderFloat("Render Scale", &m_RenderScale, 0.3f, 1.f);
+		//	
+		//	glm::vec3 pos = m_Camera.GetCameraPosition();
+		//	glm::vec3 rot = m_Camera.GetCameraOrientation();
+		//	
+		//	ImGui::Text("Frametime:   %f ms", Stats.FrameTime);
+		//	ImGui::Text("Draw Time:   %f ms", Stats.MeshDrawTime);
+		//	ImGui::Text("Update Time: %f ms", Stats.SceneUpdateTime);
+		//	ImGui::Text("Triangles:   %i", Stats.TriangleCount);
+		//	ImGui::Text("Draws:		  %i", Stats.DrawcallCount);
+		//	
+		//	ImGui::NewLine();
+		//	
+		//	ImGui::Text("Location:	  %f, %f, %f", pos.x, pos.y, pos.z);
+		//	ImGui::Text("Rotation:	  %f, %f, %f", rot.x, rot.y, rot.z);
+		//	
+		//	ImGui::NewLine();
+		//	if (ImGui::CollapsingHeader("Lights"))
+		//	{
+		//		ImGui::ColorEdit3("Ambient Light", glm::value_ptr(m_SceneData.AmbientColor));
+		//	
+		//		for (size_t i = 0; i < m_Lights.Lights.size(); i++)
+		//		{
+		//			ImGui::PushID(i);
+		//			ImGui::SliderInt("Type", &m_Lights.Lights[i].Type, 0, 2);
+		//			ImGui::SliderFloat("Intensity", &m_Lights.Lights[i].Intensity, 0.0f, 999.0f);
+		//			ImGui::ColorEdit3("Position", glm::value_ptr(m_Lights.Lights[i].Position));
+		//			ImGui::ColorEdit4("Color", glm::value_ptr(m_Lights.Lights[i].Color));
+		//			ImGui::SliderFloat3("Direction", glm::value_ptr(m_Lights.Lights[i].Direction), -1.0f, 1.0f);
+		//			ImGui::PopID();
+		//		}
+		//	}
+		//}
+		//ImGui::End();
 
 		// Wait until the gpu has finished rendering the last frame. Timeout of 1e9 ns
 		VK_CHECK(vkWaitForFences(Device, 1, &GetCurrentFrame().RenderFence, true, 1000000000));
@@ -126,8 +167,7 @@ namespace Yoru
 		GetCurrentFrame().FrameDescriptors.ClearPools(Device);
 		VK_CHECK(vkResetFences(Device, 1, &GetCurrentFrame().RenderFence));
 
-		uint32_t swapchainImageIndex;
-		VkResult result = vkAcquireNextImageKHR(Device, m_Swapchain, 1000000000, GetCurrentFrame().SwapchainSemaphore, nullptr, &swapchainImageIndex);
+		VkResult result = vkAcquireNextImageKHR(Device, m_Swapchain, 1000000000, GetCurrentFrame().SwapchainSemaphore, nullptr, &m_SwapChainIndex);
 		if (result == VK_ERROR_OUT_OF_DATE_KHR)
 		{
 			m_ResizeRequested = true;
@@ -149,12 +189,27 @@ namespace Yoru
 		DrawMain(cmd);
 
 		VKUtils::transitionImage(cmd, DrawImage.Image, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL);
-		VKUtils::transitionImage(cmd, m_SwapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
-		VKUtils::copyImageToImage(cmd, DrawImage.Image, m_SwapchainImages[swapchainImageIndex], m_DrawExtent, m_SwapchainExtent);
-		VKUtils::transitionImage(cmd, m_SwapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-		DrawImgui(cmd, m_SwapchainImageViews[swapchainImageIndex]);
-		VKUtils::transitionImage(cmd, m_SwapchainImages[swapchainImageIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+		VKUtils::transitionImage(cmd, m_SwapchainImages[m_SwapChainIndex], VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+		VKUtils::copyImageToImage(cmd, DrawImage.Image, m_SwapchainImages[m_SwapChainIndex], m_DrawExtent, m_SwapchainExtent);
+		VKUtils::transitionImage(cmd, m_SwapchainImages[m_SwapChainIndex], VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		
+		// ImGui EndFrame
+		VkRenderingAttachmentInfo colorAttachment = VkInit::attachmentInfo(m_SwapchainImageViews[m_SwapChainIndex], nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
+		VkRenderingInfo renderInfo = VkInit::renderingInfo(m_SwapchainExtent, &colorAttachment, nullptr);
+		vkCmdBeginRendering(cmd, &renderInfo);
+		
+		for (Layer* layer : app->GetLayerStack())
+			layer->OnImGuiRender();
+		imguiLayer->EndFrame();
 
+		vkCmdEndRendering(cmd);
+
+		VKUtils::transitionImage(cmd, m_SwapchainImages[m_SwapChainIndex], VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL, VK_IMAGE_LAYOUT_PRESENT_SRC_KHR);
+	}
+
+	void VKRenderer::EndFrame()
+	{
+		VkCommandBuffer cmd = GetCurrentFrame().CommandBuffer;
 		VK_CHECK(vkEndCommandBuffer(cmd));
 
 		//prepare the submission to the queue. 
@@ -184,9 +239,9 @@ namespace Yoru
 		presentInfo.swapchainCount = 1;
 		presentInfo.pWaitSemaphores = &GetCurrentFrame().RenderSemaphore;
 		presentInfo.waitSemaphoreCount = 1;
-		presentInfo.pImageIndices = &swapchainImageIndex;
+		presentInfo.pImageIndices = &m_SwapChainIndex;
 
-		result = vkQueuePresentKHR(m_GraphicsQueue, &presentInfo);
+		VkResult result = vkQueuePresentKHR(m_GraphicsQueue, &presentInfo);
 		if (result == VK_ERROR_OUT_OF_DATE_KHR)
 		{
 			m_ResizeRequested = true;
@@ -195,7 +250,7 @@ namespace Yoru
 		m_FrameNumber++;
 	}
 
-	void VKContext::ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function)
+	void VKRenderer::ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function)
 	{
 		VK_CHECK(vkResetFences(Device, 1, &m_ImmediateFence));
 		VK_CHECK(vkResetCommandBuffer(m_ImmediateCommandBuffer, 0));
@@ -220,7 +275,7 @@ namespace Yoru
 		VK_CHECK(vkWaitForFences(Device, 1, &m_ImmediateFence, true, 9999999999));
 	}
 
-	GPUMeshBuffers VKContext::UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices)
+	GPUMeshBuffers VKRenderer::UploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices)
 	{
 		const size_t vertexBufferSize = vertices.size() * sizeof(Vertex);
 		const size_t indexBufferSize = indices.size() * sizeof(uint32_t);
@@ -265,7 +320,7 @@ namespace Yoru
 	}
 
 
-	void VKContext::InitVulkan()
+	void VKRenderer::InitVulkan()
 	{
 		vkb::InstanceBuilder builder;
 
@@ -334,7 +389,7 @@ namespace Yoru
 			});
 	}
 
-	void VKContext::InitSwapchain()
+	void VKRenderer::InitSwapchain()
 	{
 		auto [width, height] = m_BackEndWindow->GetWindowSize();
 		CreateSwapchain(width, height);
@@ -387,7 +442,7 @@ namespace Yoru
 			});
 	}
 
-	void VKContext::InitCommands()
+	void VKRenderer::InitCommands()
 	{
 		VkCommandPoolCreateInfo commandPoolInfo = {};
 		commandPoolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
@@ -414,7 +469,7 @@ namespace Yoru
 			});
 	}
 
-	void VKContext::InitSyncStructures()
+	void VKRenderer::InitSyncStructures()
 	{
 		//create syncronization structures
 		//one fence to control when the gpu has finished rendering the frame,
@@ -436,7 +491,7 @@ namespace Yoru
 		m_MainDeletionQueue.PushFunction([=]() { vkDestroyFence(Device, m_ImmediateFence, nullptr); });
 	}
 
-	void VKContext::InitDescriptors()
+	void VKRenderer::InitDescriptors()
 	{
 		//create a descriptor pool that will hold 10 sets with 1 image each
 		std::vector<DescriptorAllocatorDynamic::PoolSizeRatio> sizes =
@@ -512,7 +567,7 @@ namespace Yoru
 		}
 	}
 
-	void VKContext::InitPipelines()
+	void VKRenderer::InitPipelines()
 	{
 		// Graphics
 		InitCubeMapPipeline();
@@ -522,7 +577,7 @@ namespace Yoru
 		MetalRoughMaterial.BuildPipelines(this);
 	}
 
-	void VKContext::InitCubeMapPipeline()
+	void VKRenderer::InitCubeMapPipeline()
 	{
 		VkShaderModule fragShader;
 		VkShaderModule vertexShader;
@@ -574,7 +629,7 @@ namespace Yoru
 			});
 	}
 
-	void VKContext::InitMeshPipeline()
+	void VKRenderer::InitMeshPipeline()
 	{
 		VkShaderModule fragShader;
 		VkShaderModule vertexShader;
@@ -626,7 +681,7 @@ namespace Yoru
 	}
 
 
-	void VKContext::InitShadowMapPipeline()
+	void VKRenderer::InitShadowMapPipeline()
 	{
 		VkShaderModule fragShader;
 		VkShaderModule vertexShader;
@@ -677,7 +732,7 @@ namespace Yoru
 			});
 	}
 
-	void VKContext::InitDefaultData()
+	void VKRenderer::InitDefaultData()
 	{
 		std::array<Vertex, 8> cubeVertices;
 		cubeVertices[0].Position = { 1.0f, -1.0f,  1.0f, };
@@ -780,7 +835,7 @@ namespace Yoru
 			});
 	}
 
-	void VKContext::InitDepthBuffers()
+	void VKRenderer::InitDepthBuffers()
 	{
 		m_SpotlightShadows.reserve(m_Lights.TotalSpotLights);
 
@@ -816,7 +871,7 @@ namespace Yoru
 			});
 	}
 
-	void GLTFMetallic_Roughness::BuildPipelines(VKContext* engine)
+	void GLTFMetallic_Roughness::BuildPipelines(VKRenderer* engine)
 	{
 		VkShaderModule fragShader;
 		VkShaderModule vertexShader;
@@ -927,7 +982,7 @@ namespace Yoru
 		return matData;
 	}
 
-	void VKContext::CreateSwapchain(uint32_t width, uint32_t height)
+	void VKRenderer::CreateSwapchain(uint32_t width, uint32_t height)
 	{
 		vkb::SwapchainBuilder swapchainBuilder{ m_PhysicalDevice, Device, m_Surface };
 		m_SwapchainFormat = VK_FORMAT_R8G8B8A8_UNORM; // cant use VK_FORMAT_R16G16B16A16_SFLOAT cuz spawnchain doesnt directly translate to floats
@@ -935,7 +990,7 @@ namespace Yoru
 		vkb::Swapchain vkbSwapchain = swapchainBuilder
 			//.use_default_format_selection()
 			.set_desired_format(VkSurfaceFormatKHR{ .format = m_SwapchainFormat, .colorSpace = VK_COLOR_SPACE_SRGB_NONLINEAR_KHR })
-			.set_desired_present_mode(VK_PRESENT_MODE_FIFO_KHR)
+			.set_desired_present_mode(VK_PRESENT_MODE_FIFO_RELAXED_KHR)
 			.set_desired_extent(width, height)
 			.add_image_usage_flags(VK_IMAGE_USAGE_TRANSFER_DST_BIT)
 			.build()
@@ -947,7 +1002,7 @@ namespace Yoru
 		m_SwapchainImageViews = vkbSwapchain.get_image_views().value();
 	}
 
-	void VKContext::DestroySwapchain()
+	void VKRenderer::DestroySwapchain()
 	{
 		vkDestroySwapchainKHR(Device, m_Swapchain, nullptr);
 
@@ -957,7 +1012,7 @@ namespace Yoru
 		}
 	}
 
-	void VKContext::ResizeSwapchain()
+	void VKRenderer::ResizeSwapchain()
 	{
 		vkDeviceWaitIdle(Device);
 
@@ -968,7 +1023,7 @@ namespace Yoru
 		m_ResizeRequested = false;
 	}
 
-	void VKContext::DrawMesh(VkCommandBuffer cmd)
+	void VKRenderer::DrawMesh(VkCommandBuffer cmd)
 	{
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_MeshPipeline);
 
@@ -990,7 +1045,7 @@ namespace Yoru
 		}
 	}
 
-	void VKContext::DrawCubeMap(VkCommandBuffer cmd)
+	void VKRenderer::DrawCubeMap(VkCommandBuffer cmd)
 	{
 		vkCmdBindPipeline(cmd, VK_PIPELINE_BIND_POINT_GRAPHICS, m_CubeMapPipeline);
 
@@ -1025,7 +1080,7 @@ namespace Yoru
 		vkCmdDrawIndexed(cmd, 3, 1, 0, 0, 0);
 	}
 
-	void VKContext::DrawMain(VkCommandBuffer cmd)
+	void VKRenderer::DrawMain(VkCommandBuffer cmd)
 	{
 		auto start = std::chrono::system_clock::now();
 
@@ -1061,7 +1116,7 @@ namespace Yoru
 		m_MainDrawContext.TransparentSurfaces.clear();
 	}
 
-	void VKContext::DrawGeometry(VkCommandBuffer cmd, VkDescriptorSet sceneDescriptor, const std::vector<size_t>& opaqueDraws)
+	void VKRenderer::DrawGeometry(VkCommandBuffer cmd, VkDescriptorSet sceneDescriptor, const std::vector<size_t>& opaqueDraws)
 	{
 		// Defined outside of the draw function, this is the state we will try to skip
 		MaterialPipeline* lastPipeline = nullptr;
@@ -1135,7 +1190,7 @@ namespace Yoru
 		}
 	}
 
-	void VKContext::DrawShadowMap(VkCommandBuffer cmd, VkDescriptorSet sceneDescriptor, const std::vector<size_t>& opaqueDraws)
+	void VKRenderer::DrawShadowMap(VkCommandBuffer cmd, VkDescriptorSet sceneDescriptor, const std::vector<size_t>& opaqueDraws)
 	{
 		// Draw to spotlight shadowmap
 		for (size_t i = 0; i < m_Lights.Lights.size(); i++)
@@ -1241,17 +1296,7 @@ namespace Yoru
 		}
 	}
 
-	void VKContext::DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView)
-	{
-		VkRenderingAttachmentInfo colorAttachment = VkInit::attachmentInfo(targetImageView, nullptr, VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL);
-		VkRenderingInfo renderInfo = VkInit::renderingInfo(m_SwapchainExtent, &colorAttachment, nullptr);
-
-		vkCmdBeginRendering(cmd, &renderInfo);
-		BackEndImGui::EndFrame(cmd);
-		vkCmdEndRendering(cmd);
-	}
-
-	VkDescriptorSet VKContext::SetSceneDescriptor()
+	VkDescriptorSet VKRenderer::SetSceneDescriptor()
 	{
 		AllocatedBuffer gpuSceneDataBuffer = CreateBuffer(sizeof(GPUSceneData), VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
 		size_t lightBufferSize = (sizeof(uint32_t) * 4) + (m_Lights.Lights.size() * sizeof(Light));
@@ -1286,7 +1331,7 @@ namespace Yoru
 		return sceneDescriptor;
 	}
 
-	std::vector<size_t> VKContext::GetSortedOpaqueDraws()
+	std::vector<size_t> VKRenderer::GetSortedOpaqueDraws()
 	{
 		std::vector<size_t> opaqueDraws;
 		opaqueDraws.reserve(m_MainDrawContext.OpaqueSurfaces.size());
@@ -1317,7 +1362,7 @@ namespace Yoru
 		return opaqueDraws;
 	}
 
-	void VKContext::UpdateDeltaTimeAndTitle()
+	void VKRenderer::UpdateDeltaTimeAndTitle()
 	{
 		// Update Title
 		static float lastTime = 0.0f;
@@ -1330,11 +1375,11 @@ namespace Yoru
 		if (m_TitleUpdateTime >= 1.0)
 		{
 			size_t fps = static_cast<size_t>(nFrames / m_TitleUpdateTime);
-
 			float delay = static_cast<size_t>(100'000.0f / nFrames) / 100.0f;
+			Application* const app = Yoru::Application::Get();
 
 			std::stringstream ss;
-			ss << "Engine" << "    [FPS: " << fps << "]     " << "[" << delay << " ms]";
+			ss << app->GetAppName() << "    [FPS: " << fps << "]     " << "[" << delay << " ms]";
 			m_BackEndWindow->SetWindowTitle(ss.str().c_str());
 
 			nFrames = 0;
@@ -1346,43 +1391,7 @@ namespace Yoru
 		m_LastFrameTime = currentTime;
 	}
 
-	void VKContext::InitImGui()
-	{
-		// 1: create descriptor pool for IMGUI
-		//  the size of the pool is very oversize, but it's copied from imgui demo
-		//  itself.
-		VkDescriptorPoolSize pool_sizes[] = { { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
-			{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
-			{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 } };
-
-		VkDescriptorPoolCreateInfo poolInfo = {};
-		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-		poolInfo.maxSets = 1000;
-		poolInfo.poolSizeCount = (uint32_t)std::size(pool_sizes);
-		poolInfo.pPoolSizes = pool_sizes;
-
-		VkDescriptorPool imguiPool;
-		VK_CHECK(vkCreateDescriptorPool(Device, &poolInfo, nullptr, &imguiPool));
-
-		BackEndImGui::Init(m_Instance, m_PhysicalDevice, Device, m_GraphicsQueue, imguiPool);
-
-		// add the destroy the imgui created structures
-		m_MainDeletionQueue.PushFunction([=]() {
-			BackEndImGui::Shutdown();
-			vkDestroyDescriptorPool(Device, imguiPool, nullptr);
-			});
-	}
-
-	AllocatedBuffer VKContext::CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage)
+	AllocatedBuffer VKRenderer::CreateBuffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage)
 	{
 		VkBufferCreateInfo bufferInfo = { .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO };
 		bufferInfo.pNext = nullptr;
@@ -1399,12 +1408,12 @@ namespace Yoru
 		return newBuffer;
 	}
 
-	void VKContext::DestroyBuffer(const AllocatedBuffer& buffer)
+	void VKRenderer::DestroyBuffer(const AllocatedBuffer& buffer)
 	{
 		vmaDestroyBuffer(m_Allocator, buffer.Buffer, buffer.Allocation);
 	}
 
-	AllocatedImage VKContext::CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped)
+	AllocatedImage VKRenderer::CreateImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped)
 	{
 		AllocatedImage newImage;
 		newImage.ImageFormat = format;
@@ -1437,7 +1446,7 @@ namespace Yoru
 		return newImage;
 	}
 
-	AllocatedImage VKContext::UploadImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped)
+	AllocatedImage VKRenderer::UploadImage(void* data, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, bool mipmapped)
 	{
 		// Multiplied by 4 because each color component is stored in 8 bit or 1 byte
 		size_t dataSize = size.depth * size.width * size.height * 4;
@@ -1477,7 +1486,7 @@ namespace Yoru
 		return newImage;
 	}
 
-	AllocatedImage VKContext::CreateCubeMapImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, uint32_t mipMapLevels)
+	AllocatedImage VKRenderer::CreateCubeMapImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, uint32_t mipMapLevels)
 	{
 		AllocatedImage newImage;
 		newImage.ImageFormat = format;
@@ -1511,7 +1520,7 @@ namespace Yoru
 		return newImage;
 	}
 
-	AllocatedImage VKContext::UploadCubeMapImage(void* data, const std::span<VkBufferImageCopy> bufferCopyRegions,
+	AllocatedImage VKRenderer::UploadCubeMapImage(void* data, const std::span<VkBufferImageCopy> bufferCopyRegions,
 		VkExtent3D size, VkFormat format, VkImageUsageFlags usage, uint32_t mipMapLevels, size_t dataSize)
 	{
 		AllocatedBuffer uploadBuffer = CreateBuffer(dataSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VMA_MEMORY_USAGE_CPU_TO_GPU);
@@ -1535,13 +1544,13 @@ namespace Yoru
 		return newImage;
 	}
 
-	void VKContext::DestroyImage(const AllocatedImage& image)
+	void VKRenderer::DestroyImage(const AllocatedImage& image)
 	{
 		vkDestroyImageView(Device, image.ImageView, nullptr);
 		vmaDestroyImage(m_Allocator, image.Image, image.Allocation);
 	}
 
-	void VKContext::UpdateScene()
+	void VKRenderer::UpdateScene()
 	{
 		auto start = std::chrono::system_clock::now();
 
@@ -1675,6 +1684,11 @@ namespace Yoru
 		auto end = std::chrono::system_clock::now();
 		auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(end - start);
 		Stats.SceneUpdateTime = elapsed.count() / 1000.f;
+	}
+
+	void VKRenderer::PushToDeletionQueue(std::function<void()>&& function)
+	{
+		m_MainDeletionQueue.PushFunction(std::move(function));
 	}
 
 	void MeshNode::Draw(const glm::mat4& topMatrix, DrawContext& ctx)

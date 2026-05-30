@@ -1,17 +1,56 @@
 #include <imgui.h>
+#include <imgui_internal.h>		// for GImGui
 #include <imgui_impl_glfw.h>
 #include <imgui_impl_vulkan.h>
-#include "Platform/Vulkan/VKContext.h"
 
-#include "Yoru/ImGui/BackEndImGui.h"
+#include "Yoru/UI/ImGuiLayer.h"
 #include "Yoru/Core/Application.h"
+#include "Platform/Vulkan/VKRenderer.h"
 
 namespace Yoru
 {
-	void BackEndImGui::Init(VkInstance instance, VkPhysicalDevice physicalDevice, VkDevice device, VkQueue graphicsQueue, VkDescriptorPool imguiPool)
+	void DarkTheme();
+
+	ImGuiLayer::ImGuiLayer()
+		: Layer("ImGuiLayer")
 	{
+	}
+
+	ImGuiLayer::~ImGuiLayer()
+	{
+
+	}
+
+	void ImGuiLayer::OnAttach()
+	{
+		Application* app = Application::Get();
+		VKRenderer* renderer = app->GetVulkanRenderer();
+
+		// 1: create descriptor pool for IMGUI
+		//  the size of the pool is very oversize, but it's copied from imgui demo
+		//  itself.
+		VkDescriptorPoolSize pool_sizes[] = { { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+			{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 } };
+
+		VkDescriptorPoolCreateInfo poolInfo = {};
+		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+		poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
+		poolInfo.maxSets = 1000;
+		poolInfo.poolSizeCount = (uint32_t)std::size(pool_sizes);
+		poolInfo.pPoolSizes = pool_sizes;
+
+		VK_CHECK(vkCreateDescriptorPool(renderer->GetDevice(), &poolInfo, nullptr, &m_ImGuiPool));
+
 		// 2: initialize imgui library
-	
 		// this initializes the core structures of imgui
 		ImGui::CreateContext();
 		ImGuiIO& io = ImGui::GetIO(); (void)io;
@@ -19,105 +58,89 @@ namespace Yoru
 		io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
 		io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
-	
-		ImGuiDarkTheme();
-		
+
+		DarkTheme();
+
 		// this initializes imgui for vulkan
 		ImGui_ImplGlfw_InitForVulkan(Application::Get()->GetWindow()->GetNativeWindow(), true);
 		ImGui_ImplVulkan_InitInfo init_info = {};
-		init_info.Instance = instance;
-		init_info.PhysicalDevice = physicalDevice;
-		init_info.Device = device;
-		init_info.Queue = graphicsQueue;
-		init_info.DescriptorPool = imguiPool;
+		init_info.Instance = renderer->GetInstance();
+		init_info.PhysicalDevice = renderer->GetPhysicalDevice();
+		init_info.Device = renderer->GetDevice();
+		init_info.Queue = renderer->GetGraphicsQueue();
+		init_info.DescriptorPool = m_ImGuiPool;
 		init_info.MinImageCount = 3;
 		init_info.ImageCount = 3;
 		init_info.UseDynamicRendering = true;
-	
+
 		//dynamic rendering parameters for imgui to use
 		init_info.PipelineInfoMain.PipelineRenderingCreateInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
 		init_info.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
-		init_info.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &VKContext::GetSwapchainFormat();
-	
+		init_info.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &(renderer->GetSwapchainFormat());
+
 		init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-	
+
 		ImGui_ImplVulkan_Init(&init_info);
-	
-		//ImGui_ImplVulkan_CreateFontsTexture();
+
+		// Add shutdown to deletion queue for proper sync
+		renderer->PushToDeletionQueue([this]()
+			{
+				VKRenderer* renderer = Application::Get()->GetVulkanRenderer();
+
+				ImGui_ImplVulkan_Shutdown();
+				// add the destroy the imgui created structures
+				vkDestroyDescriptorPool(renderer->GetDevice(), m_ImGuiPool, nullptr);
+			});
+	}
+
+	void ImGuiLayer::OnDetach()
+	{
+
+	}
+
+	void ImGuiLayer::OnEvent(Event& e)
+	{
+		if (m_BlockEvents)
+		{
+			ImGuiIO& io = ImGui::GetIO();
+			e.Handled |= e.IsInCategory(EventCategoryMouse) & io.WantCaptureMouse;
+			e.Handled |= e.IsInCategory(EventCategoryKeyboard) & io.WantCaptureKeyboard;
+		}
 	}
 	
-	void BackEndImGui::BeginFrame()
+	void ImGuiLayer::BeginFrame()
 	{
 		// imgui new frame
 		ImGui_ImplVulkan_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
-	
-		//some imgui UI to test
-		//ImGui::ShowDemoWindow();
-	
-		if (ImGui::Begin("Main Menu"))
-		{
-			//ImGui::SliderFloat("Render Scale", &m_RenderScale, 0.3f, 1.f);
-			//
-			//glm::vec3 pos = m_Camera.GetCameraPosition();
-			//glm::vec3 rot = m_Camera.GetCameraOrientation();
-			//
-			//ImGui::Text("Frametime:   %f ms", Stats.FrameTime);
-			//ImGui::Text("Draw Time:   %f ms", Stats.MeshDrawTime);
-			//ImGui::Text("Update Time: %f ms", Stats.SceneUpdateTime);
-			//ImGui::Text("Triangles:   %i", Stats.TriangleCount);
-			//ImGui::Text("Draws:		  %i", Stats.DrawcallCount);
-			//
-			//ImGui::NewLine();
-			//
-			//ImGui::Text("Location:	  %f, %f, %f", pos.x, pos.y, pos.z);
-			//ImGui::Text("Rotation:	  %f, %f, %f", rot.x, rot.y, rot.z);
-			//
-			//ImGui::NewLine();
-			//if (ImGui::CollapsingHeader("Lights"))
-			//{
-			//	ImGui::ColorEdit3("Ambient Light", glm::value_ptr(m_SceneData.AmbientColor));
-			//
-			//	for (size_t i = 0; i < m_Lights.Lights.size(); i++)
-			//	{
-			//		ImGui::PushID(i);
-			//		ImGui::SliderInt("Type", &m_Lights.Lights[i].Type, 0, 2);
-			//		ImGui::SliderFloat("Intensity", &m_Lights.Lights[i].Intensity, 0.0f, 999.0f);
-			//		ImGui::ColorEdit3("Position", glm::value_ptr(m_Lights.Lights[i].Position));
-			//		ImGui::ColorEdit4("Color", glm::value_ptr(m_Lights.Lights[i].Color));
-			//		ImGui::SliderFloat3("Direction", glm::value_ptr(m_Lights.Lights[i].Direction), -1.0f, 1.0f);
-			//		ImGui::PopID();
-			//	}
-			//}
-		}
-	
-		ImGui::End();
-	
+	}
+
+	void ImGuiLayer::EndFrame()
+	{
+		Application* app = Application::Get();
+		VKRenderer* renderer = app->GetVulkanRenderer();
+
 		//make imgui calculate internal draw structures
 		ImGui::Render();
-	}
-	
-	void BackEndImGui::EndFrame(VkCommandBuffer cmd)
-	{
 		ImGuiIO& io = ImGui::GetIO(); (void)io;
 		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
 		{
 			ImGui::UpdatePlatformWindows();
 			ImGui::RenderPlatformWindowsDefault();
 		}
-	
-		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), cmd);
+		
+		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), renderer->GetCurrentFrame().CommandBuffer);
 	}
-	
-	void BackEndImGui::Shutdown()
+
+	uint32_t ImGuiLayer::GetActiveWidgetID() const
 	{
-		ImGui_ImplVulkan_Shutdown();
+		return GImGui->ActiveId;
 	}
 	
 	// Dark Theme for ImGui
 	// Source: https://github.com/ocornut/imgui/issues/707#issuecomment-917151020
-	void BackEndImGui::ImGuiDarkTheme()
+	void DarkTheme()
 	{
 		ImVec4* colors = ImGui::GetStyle().Colors;
 		colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);

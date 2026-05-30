@@ -187,7 +187,7 @@ namespace Yoru
 
 		DescriptorWriter Writer;
 
-		void BuildPipelines(class VKContext* engine);
+		void BuildPipelines(class VKRenderer* engine);
 		void ClearResources(VkDevice device);
 		MaterialInstance WriteMaterial(VkDevice device, MaterialPass pass, const MaterialResources& resources, DescriptorAllocatorDynamic& descriptorAllocator);
 	};

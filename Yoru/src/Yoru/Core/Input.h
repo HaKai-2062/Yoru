@@ -32,7 +32,7 @@ namespace Yoru
 	private:
 		static std::pair<double, double> m_MousePos;
 		static std::pair<double, double> m_LastMousePos;
-		static std::array<bool, YORU_KEY_LAST> m_PreviousKeyState;
-		static std::array<bool, YORU_KEY_LAST> m_CurrentKeyState;
+		static std::array<bool, Yoru::Key::Last> m_PreviousKeyState;
+		static std::array<bool, Yoru::Key::Last> m_CurrentKeyState;
 	};
 }

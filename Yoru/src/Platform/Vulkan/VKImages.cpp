@@ -1,6 +1,6 @@
 #include "Platform/Vulkan/VKImages.h"
 #include "Platform/Vulkan/VKInitializers.h"
-#include "Platform/Vulkan/VKContext.h"
+#include "Platform/Vulkan/VKRenderer.h"
 
 #include <ktx.h>
 #include <ktxvulkan.h>
@@ -146,7 +146,7 @@ namespace Yoru
         transitionImage(cmd, image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
     }
 
-    bool VKUtils::loadCubeMap(VKContext* engine, std::string_view filename, VkFormat format)
+    bool VKUtils::loadCubeMap(VKRenderer* engine, std::string_view filename, VkFormat format)
     {
         ktxTexture* ktxTexture;
         ktxResult result = ktxTexture_CreateFromNamedFile(filename.data(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &ktxTexture);

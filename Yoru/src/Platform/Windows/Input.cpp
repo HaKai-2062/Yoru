@@ -8,8 +8,8 @@ namespace Yoru
 {
 	std::pair<double, double> Input::m_MousePos = std::make_pair(0.0, 0.0);
 	std::pair<double, double> Input::m_LastMousePos = std::make_pair(0.0, 0.0);
-	std::array<bool, YORU_KEY_LAST> Input::m_PreviousKeyState{};
-	std::array<bool, YORU_KEY_LAST> Input::m_CurrentKeyState{};
+	std::array<bool, Yoru::Key::Last> Input::m_PreviousKeyState{};
+	std::array<bool, Yoru::Key::Last> Input::m_CurrentKeyState{};
 
 	void Input::SetCursorState(CursorState cursorState)
 	{
@@ -47,7 +47,7 @@ namespace Yoru
 	void Input::BeginFrame()
 	{
 		GLFWwindow* const window = Application::Get()->GetWindow()->GetNativeWindow();
-		for (int key = 0; key < YORU_KEY_LAST; key++)
+		for (int key = 0; key < Yoru::Key::Last; key++)
 		{
 			m_CurrentKeyState[key] = (glfwGetKey(window, key) == GLFW_PRESS);
 		}

@@ -8,7 +8,7 @@
 
 namespace Yoru
 {
-    class VKContext;
+    class VKRenderer;
 
     struct GLTFMaterial
     {
@@ -53,7 +53,7 @@ namespace Yoru
         std::vector<VkSampler> Samplers;
         DescriptorAllocatorDynamic DescriptorPool;
         AllocatedBuffer MaterialDataBuffer;
-        VKContext* Engine;
+        VKRenderer* Engine;
 
         ~LoadedGLTF() { ClearAll(); };
         virtual void Draw(const glm::mat4& topMatrix, DrawContext& ctx);
@@ -63,6 +63,6 @@ namespace Yoru
         void ClearAll();
     };
 
-    std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VKContext* engine, std::string_view fileDir, std::string_view fileName);
-    std::optional<AllocatedImage> loadImage(VKContext* engine, fastgltf::Asset& asset, fastgltf::Image& image, std::string_view assetDir);
+    std::optional<std::shared_ptr<LoadedGLTF>> loadGltfScene(VKRenderer* engine, std::string_view fileDir, std::string_view fileName);
+    std::optional<AllocatedImage> loadImage(VKRenderer* engine, fastgltf::Asset& asset, fastgltf::Image& image, std::string_view assetDir);
 }

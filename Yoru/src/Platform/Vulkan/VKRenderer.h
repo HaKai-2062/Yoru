@@ -1,6 +1,7 @@
 #pragma once
 
 #include <vector>
+#include <span>
 
 #include "Yoru/Renderer/RendererAPI.h"
 #include "Platform/Vulkan/VKTypes.h"
@@ -62,13 +63,14 @@ namespace Yoru
 		float MeshDrawTime = 0.0f;
 	};
 
-	class VKContext : public RendererAPI
+	class VKRenderer : public RendererAPI
 	{
 	public:
 		void Init();
 		void Shutdown();
-		void DrawFrame();
 		void Update();
+		void BeginFrame();
+		void EndFrame();
 
 		FrameData& GetCurrentFrame() { return m_Frames[m_FrameNumber % 2]; };
 		void ImmediateSubmit(std::function<void(VkCommandBuffer cmd)>&& function);
@@ -80,8 +82,14 @@ namespace Yoru
 		AllocatedImage CreateCubeMapImage(VkExtent3D size, VkFormat format, VkImageUsageFlags usage, uint32_t mipMapLevels);
 		AllocatedImage UploadCubeMapImage(void* data, const std::span<VkBufferImageCopy> bufferCopyRegions, VkExtent3D size, VkFormat format, VkImageUsageFlags usage, uint32_t mapMapLevels, size_t dataSize);
 		void DestroyImage(const AllocatedImage& image);
+		void PushToDeletionQueue(std::function<void()>&& function);
 
-		static const VkFormat& GetSwapchainFormat() { return m_SwapchainFormat; }
+		const VkDevice& GetDevice() const { return Device; }
+		const VkInstance& GetInstance() const { return m_Instance; }
+		const VkPhysicalDevice& GetPhysicalDevice() const { return m_PhysicalDevice; }
+		const VkQueue& GetGraphicsQueue() const { return m_GraphicsQueue; }
+		const VkFormat& GetSwapchainFormat() const { return m_SwapchainFormat; }
+		VKRenderer& GetContext() { return *this; }
 
 	private:
 		void InitVulkan();
@@ -89,7 +97,6 @@ namespace Yoru
 		void InitCommands();
 		void InitSyncStructures();
 		void InitDescriptors();
-		void InitImGui();
 		void InitPipelines();
 		void InitCubeMapPipeline();
 		void InitMeshPipeline();
@@ -106,11 +113,10 @@ namespace Yoru
 		void DrawMesh(VkCommandBuffer cmd);
 		void DrawShadowMap(VkCommandBuffer cmd, VkDescriptorSet sceneDescriptor, const std::vector<size_t>& opaqueDraws);
 		void DrawCubeMap(VkCommandBuffer cmd);
-		void DrawImgui(VkCommandBuffer cmd, VkImageView targetImageView);
 		VkDescriptorSet SetSceneDescriptor();
 		std::vector<size_t> GetSortedOpaqueDraws();
 		void UpdateScene();
-
+	
 	public:
 		VkDevice Device;
 		AllocatedImage DrawImage;
@@ -128,6 +134,7 @@ namespace Yoru
 		bool m_IsInitialized{ false };
 		bool m_ResizeRequested{ false };
 		int m_FrameNumber{ 0 };
+		uint32_t m_SwapChainIndex{ 0 };
 		float m_LastFrameTime{ 0 };
 		float m_DeltaTime{ 0 };
 		float m_TitleUpdateTime{ 0 };
@@ -168,8 +175,7 @@ namespace Yoru
 		VkPhysicalDevice m_PhysicalDevice;
 		VkSurfaceKHR m_Surface;
 		VkSwapchainKHR m_Swapchain;
-		// TDL: this is bad
-		static VkFormat m_SwapchainFormat;
+		VkFormat m_SwapchainFormat;
 		std::vector<VkImage> m_SwapchainImages;
 		std::vector<VkImageView> m_SwapchainImageViews;
 		VkExtent2D m_SwapchainExtent;

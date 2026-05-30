@@ -11,17 +11,17 @@ namespace Yoru
 
 	void Camera::ProcessKeyEvents(float deltaTime)
 	{
-		if (Input::IsKeyPressed(YORU_KEY_W))
+		if (Input::IsKeyPressed(Yoru::Key::W))
 			SetCameraPosition(CameraMotion::FORWARD, deltaTime);
-		if (Input::IsKeyPressed(YORU_KEY_S))
+		if (Input::IsKeyPressed(Yoru::Key::S))
 			SetCameraPosition(CameraMotion::BACKWARD, deltaTime);
-		if (Input::IsKeyPressed(YORU_KEY_A))
+		if (Input::IsKeyPressed(Yoru::Key::A))
 			SetCameraPosition(CameraMotion::LEFT, deltaTime);
-		if (Input::IsKeyPressed(YORU_KEY_D))
+		if (Input::IsKeyPressed(Yoru::Key::D))
 			SetCameraPosition(CameraMotion::RIGHT, deltaTime);
-		if (Input::IsKeyPressed(YORU_KEY_Q))
+		if (Input::IsKeyPressed(Yoru::Key::Q))
 			SetCameraPosition(CameraMotion::DOWN, deltaTime);
-		if (Input::IsKeyPressed(YORU_KEY_E))
+		if (Input::IsKeyPressed(Yoru::Key::E))
 			SetCameraPosition(CameraMotion::UP, deltaTime);
 	}
 
