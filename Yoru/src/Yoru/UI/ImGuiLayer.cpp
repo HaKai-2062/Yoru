@@ -1,11 +1,9 @@
 #include <imgui.h>
 #include <imgui_internal.h>		// for GImGui
 #include <imgui_impl_glfw.h>
-#include <imgui_impl_vulkan.h>
 
 #include "Yoru/UI/ImGuiLayer.h"
 #include "Yoru/Core/Application.h"
-#include "Platform/Vulkan/VKRenderer.h"
 
 namespace Yoru
 {
@@ -23,79 +21,27 @@ namespace Yoru
 
 	void ImGuiLayer::OnAttach()
 	{
-		Application* app = Application::Get();
-		VKRenderer* renderer = app->GetVulkanRenderer();
-
-		// 1: create descriptor pool for IMGUI
-		//  the size of the pool is very oversize, but it's copied from imgui demo
-		//  itself.
-		VkDescriptorPoolSize pool_sizes[] = { { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
-			{ VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
-			{ VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
-			{ VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
-			{ VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 } };
-
-		VkDescriptorPoolCreateInfo poolInfo = {};
-		poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-		poolInfo.flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT;
-		poolInfo.maxSets = 1000;
-		poolInfo.poolSizeCount = (uint32_t)std::size(pool_sizes);
-		poolInfo.pPoolSizes = pool_sizes;
-
-		VK_CHECK(vkCreateDescriptorPool(renderer->GetDevice(), &poolInfo, nullptr, &m_ImGuiPool));
-
-		// 2: initialize imgui library
-		// this initializes the core structures of imgui
 		ImGui::CreateContext();
-		ImGuiIO& io = ImGui::GetIO(); (void)io;
-		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-		io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
-		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;         // Enable Docking
-		io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;       // Enable Multi-Viewport / Platform Windows
+		ImGuiIO& io = ImGui::GetIO();
+		io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
+		io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;
+		io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
+		// Multi-viewport needs its own dynamic rendering setup in the backend
+		//io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;
 
 		DarkTheme();
 
-		// this initializes imgui for vulkan
-		ImGui_ImplGlfw_InitForVulkan(Application::Get()->GetWindow()->GetNativeWindow(), true);
-		ImGui_ImplVulkan_InitInfo init_info = {};
-		init_info.Instance = renderer->GetInstance();
-		init_info.PhysicalDevice = renderer->GetPhysicalDevice();
-		init_info.Device = renderer->GetDevice();
-		init_info.Queue = renderer->GetGraphicsQueue();
-		init_info.DescriptorPool = m_ImGuiPool;
-		init_info.MinImageCount = 3;
-		init_info.ImageCount = 3;
-		init_info.UseDynamicRendering = true;
-
-		//dynamic rendering parameters for imgui to use
-		init_info.PipelineInfoMain.PipelineRenderingCreateInfo = { .sType = VK_STRUCTURE_TYPE_PIPELINE_RENDERING_CREATE_INFO };
-		init_info.PipelineInfoMain.PipelineRenderingCreateInfo.colorAttachmentCount = 1;
-		init_info.PipelineInfoMain.PipelineRenderingCreateInfo.pColorAttachmentFormats = &(renderer->GetSwapchainFormat());
-
-		init_info.PipelineInfoMain.MSAASamples = VK_SAMPLE_COUNT_1_BIT;
-
-		ImGui_ImplVulkan_Init(&init_info);
-
-		// Add shutdown to deletion queue for proper sync
-		renderer->PushToDeletionQueue([this]()
-			{
-				VKRenderer* renderer = Application::Get()->GetVulkanRenderer();
-
-				ImGui_ImplVulkan_Shutdown();
-				// add the destroy the imgui created structures
-				vkDestroyDescriptorPool(renderer->GetDevice(), m_ImGuiPool, nullptr);
-			});
+		Application* app = Application::Get();
+		// Installs its own GLFW callbacks, chaining to any set before it
+		ImGui_ImplGlfw_InitForVulkan(app->GetWindow()->GetNativeWindow(), true);
+		app->GetRenderer().InitImGui();
 	}
 
 	void ImGuiLayer::OnDetach()
 	{
-
+		Application::Get()->GetRenderer().ShutdownImGui();
+		ImGui_ImplGlfw_Shutdown();
+		ImGui::DestroyContext();
 	}
 
 	void ImGuiLayer::OnEvent(Event& e)
@@ -110,27 +56,18 @@ namespace Yoru
 	
 	void ImGuiLayer::BeginFrame()
 	{
-		// imgui new frame
-		ImGui_ImplVulkan_NewFrame();
+		Application::Get()->GetRenderer().ImGuiNewFrame();
 		ImGui_ImplGlfw_NewFrame();
 		ImGui::NewFrame();
 	}
 
-	void ImGuiLayer::EndFrame()
+	void ImGuiLayer::EndFrame(RHICommandList& cmd)
 	{
-		Application* app = Application::Get();
-		VKRenderer* renderer = app->GetVulkanRenderer();
-
-		//make imgui calculate internal draw structures
 		ImGui::Render();
-		ImGuiIO& io = ImGui::GetIO(); (void)io;
-		if (io.ConfigFlags & ImGuiConfigFlags_ViewportsEnable)
-		{
-			ImGui::UpdatePlatformWindows();
-			ImGui::RenderPlatformWindowsDefault();
-		}
-		
-		ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), renderer->GetCurrentFrame().CommandBuffer);
+		ImGui::UpdatePlatformWindows();
+		ImGui::RenderPlatformWindowsDefault();
+
+		Application::Get()->GetRenderer().RenderImGui(cmd);
 	}
 
 	uint32_t ImGuiLayer::GetActiveWidgetID() const
@@ -143,6 +80,7 @@ namespace Yoru
 	void DarkTheme()
 	{
 		ImVec4* colors = ImGui::GetStyle().Colors;
+
 		colors[ImGuiCol_Text] = ImVec4(1.00f, 1.00f, 1.00f, 1.00f);
 		colors[ImGuiCol_TextDisabled] = ImVec4(0.50f, 0.50f, 0.50f, 1.00f);
 		colors[ImGuiCol_WindowBg] = ImVec4(0.10f, 0.10f, 0.10f, 1.00f);
@@ -198,7 +136,7 @@ namespace Yoru
 		colors[ImGuiCol_NavWindowingHighlight] = ImVec4(1.00f, 0.00f, 0.00f, 0.70f);
 		colors[ImGuiCol_NavWindowingDimBg] = ImVec4(1.00f, 0.00f, 0.00f, 0.20f);
 		colors[ImGuiCol_ModalWindowDimBg] = ImVec4(1.00f, 0.00f, 0.00f, 0.35f);
-	
+
 		ImGuiStyle& style = ImGui::GetStyle();
 		style.WindowPadding = ImVec2(8.00f, 8.00f);
 		style.FramePadding = ImVec2(5.00f, 2.00f);

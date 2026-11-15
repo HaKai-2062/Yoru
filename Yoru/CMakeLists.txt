@@ -48,15 +48,19 @@ set_property(TARGET "${PROJECT_NAME}" PROPERTY CXX_STANDARD 20)
 
 #endif()
 
-find_package(Vulkan REQUIRED)
+#Vulkan provides glm headers but we will use our own
+find_package(Vulkan REQUIRED COMPONENTS volk shaderc_combined)
 find_program(GLSL_VALIDATOR glslangValidator REQUIRED HINTS /usr/bin /usr/local/bin $ENV{VULKAN_SDK}/Bin/ $ENV{VULKAN_SDK}/Bin32/)
 
+# Client code builds matrices with glm too, so these must match
+target_compile_definitions("${PROJECT_NAME}" PUBLIC
+	GLM_FORCE_RADIANS
+	GLM_FORCE_DEPTH_ZERO_TO_ONE
+	GLM_ENABLE_EXPERIMENTAL)
+
 target_compile_definitions("${PROJECT_NAME}" PRIVATE 
-	GLFW_INCLUDE_NONE=1
-	GLM_FORCE_RADIANS=1
-	GLM_FORCE_DEPTH_ZERO_TO_ONE=1
-	GLM_ENABLE_EXPERIMENTAL=1
-	VK_PROTOTYPES=1
+	GLFW_INCLUDE_NONE
+	VK_NO_PROTOTYPES
 	YORU_VALIDATION_LAYERS=1
 	SHADER_PATH="${CMAKE_SOURCE_DIR}/shaders/spirv/"
 	ASSET_PATH="${CMAKE_SOURCE_DIR}/assets/")
@@ -66,17 +70,16 @@ target_precompile_headers("${PROJECT_NAME}" PRIVATE
 
 target_include_directories("${PROJECT_NAME}" PUBLIC 
 	"${CMAKE_CURRENT_SOURCE_DIR}/vendor/glm/"
-	"${CMAKE_CURRENT_SOURCE_DIR}/src/")
+	"${CMAKE_CURRENT_SOURCE_DIR}/src/"
+	"${Vulkan_INCLUDE_DIRS}")
 #	"${CMAKE_SOURCE_DIR}/vendor/GLFW/include/"
 #	"${CMAKE_SOURCE_DIR}/vendor/imgui/"
 #	"${CMAKE_SOURCE_DIR}/vendor/imgui/backends/"
 #	"${CMAKE_SOURCE_DIR}/vendor/stb/"
 #	"${CMAKE_SOURCE_DIR}/vendor/tinyobjloader/"
 #	"${CMAKE_SOURCE_DIR}/vendor/vk-bootstrap/"
-#	"${CMAKE_SOURCE_DIR}/vendor/VulkanMemoryAllocator/"
 #	"${CMAKE_SOURCE_DIR}/vendor/libktx/include/"
-#	"${CMAKE_SOURCE_DIR}/vendor/libktx/other_include/"
-#	"${Vulkan_INCLUDE_DIRS}")
+#	"${CMAKE_SOURCE_DIR}/vendor/libktx/other_include/")
 
 target_link_libraries("${PROJECT_NAME}" PUBLIC 
 	glfw
@@ -85,12 +88,12 @@ target_link_libraries("${PROJECT_NAME}" PUBLIC
 	imgui
 	tinyobjloader
 	vk-bootstrap
-	VulkanMemoryAllocator
 	stb
 	fmt
 	fastgltf
 	libktx
-	${Vulkan_LIBRARIES})
+	Vulkan::volk
+	Vulkan::shaderc_combined)
 
 # Compile all shaders
 foreach(GLSL ${GLSL_SOURCE_FILES})

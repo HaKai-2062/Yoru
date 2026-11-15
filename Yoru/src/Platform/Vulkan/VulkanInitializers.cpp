@@ -1,4 +1,4 @@
-#include "Platform/Vulkan/VKInitializers.h"
+#include "Platform/Vulkan/VulkanInitializers.h"
 
 namespace Yoru
 {

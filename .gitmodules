@@ -17,9 +17,6 @@
 [submodule "Yoru/vendor/vk-bootstrap"]
 	path = Yoru/vendor/vk-bootstrap
 	url = https://github.com/charles-lunarg/vk-bootstrap.git
-[submodule "Yoru/vendor/VulkanMemoryAllocator"]
-	path = Yoru/vendor/VulkanMemoryAllocator
-	url = https://github.com/GPUOpen-LibrariesAndSDKs/VulkanMemoryAllocator.git
 [submodule "Yoru/vendor/fmt"]
 	path = Yoru/vendor/fmt
 	url = https://github.com/fmtlib/fmt.git

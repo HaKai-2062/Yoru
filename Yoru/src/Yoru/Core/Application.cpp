@@ -1,7 +1,8 @@
 #include "Yoru/Core/Application.h"
 #include "Yoru/Core/Log.h"
 #include "Yoru/Events/ApplicationEvent.h"
-#include "Yoru/Renderer/RendererAPI.h"
+#include "Yoru/RHI/RHIFactory.h"
+#include "Yoru/RHI/RHIDevice.h"
 #include "Yoru/UI/ImGuiLayer.h"
 
 #include <chrono>
@@ -9,6 +10,12 @@
 
 namespace Yoru
 {
+#if YORU_VALIDATION_LAYERS == 1
+	static constexpr const bool bUseValidationLayers = true;
+#else
+	static constexpr const bool bUseValidationLayers = false;
+#endif
+
 	Application* Application::s_Application = nullptr;
 
 	Application::Application(ApplicationSpecifications& AppSpec)
@@ -22,8 +29,23 @@ namespace Yoru
 		s_Application = this;
 		Log::Startup(AppSpec.LogPath.c_str());
 		m_Window.Startup(AppSpec.Name.c_str(), AppSpec.Resolution);
-		// InitRenderer
-		m_Renderer = RendererAPI::Create(RendererAPI::API::Vulkan);
+
+		// InitRHIBackend
+		RendererDesc desc;
+		desc.InstDesc.EnableValidationLayers = bUseValidationLayers;
+		desc.InstDesc.NativeWindow = m_Window.GetNativeWindow();
+		desc.DeviceDesc.PreferDiscreteGPU = true;
+		desc.SwapchainDesc.Width = m_Window.GetWindowSize().first;
+		desc.SwapchainDesc.Height = m_Window.GetWindowSize().second;
+		desc.SwapchainDesc.VSync = false;
+		m_Renderer = RHIFactory::Create(RHIFactory::API::Vulkan, desc);
+		if (!m_Renderer->Init(desc))
+		{
+			Log::Write(LogLevel::FATAL, "Failed to initialize renderer");
+			m_Running = false;
+			return;
+		}
+
 		// Init ImGui
 		m_ImGuiLayer = new ImGuiLayer();
 		PushOverlay(m_ImGuiLayer);
@@ -31,8 +53,11 @@ namespace Yoru
 
 	Application::~Application()
 	{
+		if (m_Renderer)
+			m_Renderer->WaitIdle();
 		m_LayerStack.ClearAllLayers();
-		m_Renderer->Shutdown();
+		if (m_Renderer)
+			m_Renderer->Shutdown();
 		Log::Shutdown();
 		m_Window.Shutdown();
 	}
@@ -51,13 +76,13 @@ namespace Yoru
 		}
 	}
 
-	VKRenderer* const Application::GetVulkanRenderer()
-	{
-		if (RendererAPI::s_API == RendererAPI::API::Vulkan)
-			return dynamic_cast<VKRenderer*>(m_Renderer.get());
+	//VKRenderer* const Application::GetVulkanRenderer()
+	//{
+	//	if (RendererAPI::s_API == RendererAPI::API::Vulkan)
+	//		return dynamic_cast<VKRenderer*>(m_Renderer.get());
 
-		return nullptr;
-	}
+	//	return nullptr;
+	//}
 
 	bool Application::OnWindowClose(WindowCloseEvent& e)
 	{
@@ -93,10 +118,11 @@ namespace Yoru
 
 	void Application::Run()
 	{
+		m_LastFrameTime = std::chrono::system_clock::now();
 		while (m_Running)
 		{
 			auto start = std::chrono::system_clock::now();
-			auto elapsed = std::chrono::duration_cast<std::chrono::microseconds>(m_LastFrameTime - start);
+			m_DeltaTime = std::chrono::duration<float>(start - m_LastFrameTime).count();
 			m_LastFrameTime = start;
 
 			// BeginFrames
@@ -122,18 +148,22 @@ namespace Yoru
 				continue;
 			}
 
-			//m_Camera.ProcessKeyEvents(m_DeltaTime);
-			//m_Camera.ProcessMouseEvents(m_DeltaTime);
-
 			for (Layer* layer : m_LayerStack)
-				layer->OnUpdate(elapsed.count() * 1e6);
+				layer->OnUpdate(m_DeltaTime);
 
-			m_Renderer->Update();
+			// nullptr when the swapchain had to be recreated
+			if (RHICommandList* cmd = m_Renderer->BeginFrame())
+			{
+				for (Layer* layer : m_LayerStack)
+					layer->OnRender(*cmd);
 
-			//m_ImGuiLayer->BeginFrame();
-			//for (Layer* layer : m_LayerStack)
-			//	layer->OnImGuiRender();
-			//m_ImGuiLayer->EndFrame();
+				m_ImGuiLayer->BeginFrame();
+				for (Layer* layer : m_LayerStack)
+					layer->OnImGuiRender();
+				m_ImGuiLayer->EndFrame(*cmd);
+
+				m_Renderer->EndFrame();
+			}
 
 			// EndFrames
 			Input::EndFrame();

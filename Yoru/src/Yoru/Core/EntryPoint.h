@@ -1,9 +1,9 @@
 #pragma once
 
-#include <memory>
-
 #include "Yoru/Core/Application.h"
 #include "Yoru/Core/Base.h"
+
+#include <memory>
 
 extern Yoru::Application* Yoru::CreateApplication(ApplicationSpecifications& appSpecs);
 

@@ -1,16 +1,16 @@
 #pragma once
 
-#include <memory>
-#include <string>
-
 #include "Yoru/Core/BackEndWindow.h"
-#include "Yoru/Renderer/RendererAPI.h"
 #include "Yoru/Core/Input.h"
 #include "Yoru/Core/Layer.h"
 #include "Yoru/Core/LayerStack.h"
 #include "Yoru/Events/ApplicationEvent.h"
 #include "Yoru/Events/Event.h"
-#include "Platform/Vulkan/VKRenderer.h"
+#include "Yoru/RHI/RHIRenderer.h"
+
+#include <memory>
+#include <string>
+#include <chrono>
 
 namespace Yoru
 {
@@ -39,9 +39,11 @@ namespace Yoru
 		BackEndWindow* const GetWindow() { return &m_Window; }
 		const std::string& GetAppName() { return AppSpecs.Name; }
 		
-		VKRenderer* const GetVulkanRenderer();
+		//VKRenderer* const GetVulkanRenderer();
 		ImGuiLayer* const GetImGuiLayer() { return m_ImGuiLayer; }
+		RHIRenderer& GetRenderer() { return *m_Renderer; }
 		LayerStack& GetLayerStack() { return m_LayerStack; }
+		const float GetDeltaTime() { return m_DeltaTime; }
 
 	private:
 		bool OnWindowClose(WindowCloseEvent& e);
@@ -55,7 +57,8 @@ namespace Yoru
 
 		bool m_Running = true;
 		bool m_Minimized = false;
-		std::unique_ptr<RendererAPI> m_Renderer;
+		float m_DeltaTime = 0.0f;
+		std::unique_ptr<RHIRenderer> m_Renderer;
 		LayerStack m_LayerStack;
 		ImGuiLayer* m_ImGuiLayer = nullptr;
 		std::chrono::system_clock::time_point m_LastFrameTime = {};

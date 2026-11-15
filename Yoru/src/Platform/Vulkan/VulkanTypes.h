@@ -1,24 +1,50 @@
 ﻿#pragma once
 
+#include "Yoru/Core/Log.h"
+
 #include <vulkan/vulkan.h>
 #include <vulkan/vk_enum_string_helper.h>
-#include <vk_mem_alloc.h>
+#include <glm/glm.hpp>
 
 #include <vector>
 #include <memory>
 #include <format>
 #include <functional>
+#include <optional>
+#include <deque>
 
-#include <glm/glm.hpp>
+//struct VkInstance_T;
+//struct VkPhysicalDevice_T;
+//struct VkDevice_T;
+//struct VkQueue_T;
+//struct VkDescriptorPool_T;
+//struct VkCommandBuffer_T;
+//struct VkShaderModule_T;
+////struct VkDebugUtilsMessengerEXT_T;
+////struct VkDebugUtilsMessengerCreateInfoEXT_T;
+//using VkInstance = VkInstance_T*;
+//using VkPhysicalDevice = VkPhysicalDevice_T*;
+//using VkDevice = VkDevice_T*;
+//using VkQueue = VkQueue_T*;
+//using VkDescriptorPool = VkDescriptorPool_T*;
+//using VkCommandBuffer = VkCommandBuffer_T*;
+//using VkShaderModule = VkShaderModule_T*;
+////using VkDebugUtilsMessengerEXT = VkDebugUtilsMessengerEXT_T*;
+////using VkDebugUtilsMessengerCreateInfoEXT = VkDebugUtilsMessengerCreateInfoEXT_T*;
+//enum VkFormat;
+//struct VkAllocationCallbacks;
 
-#include "Platform/Vulkan/VKDescriptors.h"
-#include "Yoru/Core/Log.h"
+struct GLFWwindow;
+struct VmaAllocator_T;
+struct VmaAllocation_T;
+struct VmaAllocationInfo;
+using VmaAllocator = VmaAllocator_T*;
+using VmaAllocation = VmaAllocation_T*;
+
 
 namespace Yoru
 {
 	constexpr unsigned int MAX_FRAMES_IN_FLIGHT = 2;
-	constexpr unsigned int MAX_POINT_LIGHTS = 8;
-	constexpr unsigned int MAX_SPOT_LIGHTS = 8;
 
 #define VK_CHECK(x)																				   \
 	do																							   \
@@ -26,7 +52,7 @@ namespace Yoru
 		VkResult err = x;																		   \
 		if (err)																				   \
 		{																						   \
-			Log::Write(LogLevel::FATAL, std::format("VK_CHECK {}", string_VkResult(err)).c_str()); \
+			Log::Write(LogLevel::FATAL, "VK_CHECK {}", string_VkResult(err));					   \
 			abort();																			   \
 		}																						   \
 	} while (0)
@@ -56,12 +82,13 @@ namespace Yoru
 	{
 		VkCommandPool CommandPool;
 		VkCommandBuffer CommandBuffer;
-		// Wait till we get ImageFromSwapchain, Wait till gpu has rendered to present on the screen
-		VkSemaphore SwapchainSemaphore, RenderSemaphore;
+		// Wait till we get ImageFromSwapchain
+		// (RenderSemaphore lives per swapchain image in VulkanRenderer)
+		VkSemaphore SwapchainSemaphore;
 		// Wait till gpu has rendered to prevent overwriting gpu commands
 		VkFence RenderFence;
 		DeletionQueue FrameDeletionQueue;
-		DescriptorAllocatorDynamic FrameDescriptors;
+		//DescriptorAllocatorDynamic FrameDescriptors;
 	};
 
 	struct AllocatedImage
@@ -77,16 +104,7 @@ namespace Yoru
 	{
 		VkBuffer Buffer;
 		VmaAllocation Allocation;
-		VmaAllocationInfo Info;
-	};
-
-	struct Vertex
-	{
-		glm::vec3 Position;
-		float UVX;
-		glm::vec3 Normal;
-		float UVY;
-		glm::vec4 Color;
+		VmaAllocationInfo* Info;
 	};
 
 	struct GPUMeshBuffers
@@ -185,11 +203,11 @@ namespace Yoru
 			uint32_t DataBufferOffset;
 		};
 
-		DescriptorWriter Writer;
+		//DescriptorWriter Writer;
 
 		void BuildPipelines(class VKRenderer* engine);
 		void ClearResources(VkDevice device);
-		MaterialInstance WriteMaterial(VkDevice device, MaterialPass pass, const MaterialResources& resources, DescriptorAllocatorDynamic& descriptorAllocator);
+		//MaterialInstance WriteMaterial(VkDevice device, MaterialPass pass, const MaterialResources& resources, DescriptorAllocatorDynamic& descriptorAllocator);
 	};
 
 	struct DrawContext;
@@ -223,5 +241,35 @@ namespace Yoru
 
 		glm::mat4 LocalTransform;
 		glm::mat4 WorldTransform;
+	};
+
+	struct QueueFamilyIndices
+	{
+		std::optional<uint32_t> GraphicsFamily = std::nullopt;
+		std::optional<uint32_t> PresentFamily = std::nullopt;
+		bool IsComplete()
+		{
+			return GraphicsFamily.has_value() && PresentFamily.has_value();
+		}
+	};
+
+	struct SwapChainSupportDetails
+	{
+		VkSurfaceCapabilitiesKHR Capabilities;
+		std::vector<VkSurfaceFormatKHR> Formats = {};
+		std::vector<VkPresentModeKHR> PresentModes = {};
+	};
+
+	struct VulkanDeviceContext
+	{
+		VkInstance Instance = VK_NULL_HANDLE;
+		VkSurfaceKHR Surface = VK_NULL_HANDLE;
+		GLFWwindow* Window = nullptr;
+		VkPhysicalDevice PhysicalDevice = VK_NULL_HANDLE;
+		VkDevice Device = VK_NULL_HANDLE;
+		VkQueue GraphicsQueue = VK_NULL_HANDLE;
+		VkQueue PresentQueue = VK_NULL_HANDLE;
+		uint32_t GraphicsQueueFamily = 0;
+		VmaAllocator Allocator = VK_NULL_HANDLE;
 	};
 }

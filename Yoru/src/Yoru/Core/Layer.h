@@ -1,11 +1,13 @@
 #pragma once
 
-#include <string>
-
 #include "Yoru/Events/Event.h"
+
+#include <string>
 
 namespace Yoru
 {
+	class RHICommandList;
+
 	class Layer
 	{
 	public:
@@ -15,6 +17,7 @@ namespace Yoru
 		virtual void OnAttach() {}
 		virtual void OnDetach() {}
 		virtual void OnUpdate(float ts) {}
+		virtual void OnRender(RHICommandList& cmd) {}
 		virtual void OnImGuiRender() {}
 		virtual void OnEvent(Event& event) {}
 

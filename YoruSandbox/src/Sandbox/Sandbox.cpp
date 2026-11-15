@@ -3,6 +3,7 @@
 
 #include "Viewport.h"
 #include "UIPanel.h"
+#include "MeshLayer.h"
 
 class Sandbox : public Yoru::Application
 {
@@ -11,6 +12,7 @@ public:
 		: Yoru::Application(appSpec)
 	{
 		PushLayer(new Viewport());
+		//PushLayer(new MeshLayer());
 		PushLayer(new UIPanel());
 	}
 

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Platform/Vulkan/VKTypes.h"
+#include "Platform/Vulkan/VulkanTypes.h"
 
 namespace Yoru::VkInit
 {

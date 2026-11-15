@@ -33,3 +33,30 @@ target_include_directories(${PROJECT_NAME} PUBLIC
 
 target_link_libraries(${PROJECT_NAME} PRIVATE 
 	Yoru)
+
+target_compile_definitions(${PROJECT_NAME} PRIVATE
+	SANDBOX_SHADER_PATH="${CMAKE_CURRENT_SOURCE_DIR}/shaders/spirv/"
+	SANDBOX_ASSET_PATH="${CMAKE_SOURCE_DIR}/assets/")
+
+# Sandbox owns its shaders, compiled the same way as the engine's
+file(GLOB SANDBOX_SHADER_FILES CONFIGURE_DEPENDS
+	"${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.vert"
+	"${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.frag"
+	"${CMAKE_CURRENT_SOURCE_DIR}/shaders/*.comp")
+target_sources(${PROJECT_NAME} PRIVATE ${SANDBOX_SHADER_FILES})
+source_group("Shader Files" FILES ${SANDBOX_SHADER_FILES})
+
+foreach(GLSL ${SANDBOX_SHADER_FILES})
+	get_filename_component(FILE_NAME ${GLSL} NAME)
+	set(SPIRV "${CMAKE_CURRENT_SOURCE_DIR}/shaders/spirv/${FILE_NAME}.spv")
+	add_custom_command(
+		OUTPUT ${SPIRV}
+		COMMAND ${CMAKE_COMMAND} -E make_directory "${CMAKE_CURRENT_SOURCE_DIR}/shaders/spirv"
+		COMMAND ${GLSL_VALIDATOR} -V --target-env vulkan1.3 ${GLSL} -o ${SPIRV}
+		DEPENDS ${GLSL})
+	list(APPEND SANDBOX_SPIRV_FILES ${SPIRV})
+endforeach()
+
+add_custom_target(SandboxShaders DEPENDS ${SANDBOX_SPIRV_FILES})
+set_target_properties(SandboxShaders PROPERTIES FOLDER "_Hidden")
+add_dependencies(${PROJECT_NAME} SandboxShaders)

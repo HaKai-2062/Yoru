@@ -1,11 +1,4 @@
-#include <fmt/core.h>
-#include <fmt/os.h>
-#include <fmt/color.h>
-#include <string>
-#include <stdarg.h>
-#include <unordered_map>
-#include <fstream>
-
+#include "pch.h"
 #include "Yoru/Core/Log.h"
 
 namespace Yoru
@@ -60,35 +53,22 @@ namespace Yoru
 		return false;
 	}
 
-	void Log::Write(LogLevel loglevel, const char* fmtStr, ...)
+	void Log::InternalWrite(LogLevel level, const std::string& msg)
 	{
-		va_list args;
-		va_start(args, fmtStr);
-		std::string msg = fmt::vformat(fmtStr, fmt::make_format_args(args));
-		Get().InternalWrite(loglevel, msg.c_str());
-		va_end(args);
-	}
-
-	void Log::InternalWrite(LogLevel logLevel, const char* fmtStr, ...)
-	{
-		// If both logs disabled return
 		if (!m_LogConsole && !m_LogFile)
 			return;
 
-		va_list args;
-		va_start(args, fmtStr);
-		std::string msg = fmt::vformat(fmtStr, fmt::make_format_args(args));
-		va_end(args);
 		std::lock_guard<std::mutex> lock(g_LogMutex);
 
-		if (m_LogConsole && logLevel <= m_MinLevelConsole)
+		if (m_LogConsole && level <= m_MinLevelConsole)
 		{
-			fmt::print(fmt::fg(g_LogColors[logLevel]), "{}: {}\n", g_LogString[logLevel], msg);
+			fmt::print(fmt::fg(g_LogColors[level]), 
+				"{}: {}\n", g_LogString[level], msg);
 		}
 
-		if (m_LogFile && logLevel <= m_MinLevelFile && g_File)
+		if (m_LogFile && level <= m_MinLevelFile && g_File)
 		{
-			g_File << fmt::format("{}: {}", g_LogString[logLevel], msg) << std::endl;
+			g_File << fmt::format("{}: {}", g_LogString[level], msg) << std::endl;
 		}
 	}
 }

@@ -39,14 +39,17 @@ add_subdirectory(Yoru/vendor/fmt)
 add_subdirectory(Yoru/vendor/GLFW)
 add_subdirectory(Yoru/vendor/glm)
 add_subdirectory(Yoru/vendor/MissingCMake/imgui)
+# Yoru loads Vulkan through volk, so ImGui's Vulkan backend must call through volk's function pointers
+find_package(Vulkan REQUIRED)
+target_include_directories(imgui PUBLIC "${Vulkan_INCLUDE_DIRS}/Volk")
+target_compile_definitions(imgui PUBLIC IMGUI_IMPL_VULKAN_USE_VOLK)
 add_subdirectory(Yoru/vendor/MissingCMake/glad)
 add_subdirectory(Yoru/vendor/MissingCMake/stb)
 add_subdirectory(Yoru/vendor/libktx)
 add_subdirectory(Yoru/vendor/tinyobjloader)
 add_subdirectory(Yoru/vendor/vk-bootstrap)
-add_subdirectory(Yoru/vendor/VulkanMemoryAllocator)
 
-set_target_properties(simdjson fastgltf fmt glfw glm imgui glad stb libktx tinyobjloader vk-bootstrap VulkanMemoryAllocator
+set_target_properties(simdjson fastgltf fmt glfw glm imgui glad stb libktx tinyobjloader vk-bootstrap 
     PROPERTIES FOLDER "Dependencies"
 )
 if(TARGET uninstall)

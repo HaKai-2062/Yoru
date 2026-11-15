@@ -1,9 +1,9 @@
 #pragma once
 
+#include "Yoru/Core/Keycodes.h"
+
 #include <utility>
 #include <array>
-
-#include "Yoru/Core/Keycodes.h"
 
 namespace Yoru
 {

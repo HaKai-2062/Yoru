@@ -1,10 +1,10 @@
 #pragma once
 
+#include "Yoru/Core/Base.h"
+
 #include <string>
 #include <functional>
 #include <sstream>
-
-#include "Yoru/Core/Base.h"
 
 namespace Yoru
 {

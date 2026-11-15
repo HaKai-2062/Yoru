@@ -1,10 +1,11 @@
-#include <stdexcept>
+#include "Yoru/Core/BackEndWindow.h"
+#include "Yoru/Core/Log.h"
 
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
-#include "Yoru/Core/BackEndWindow.h"
-#include "Yoru/Core/Log.h"
+#include <stdexcept>
+
 
 namespace Yoru
 {
@@ -22,6 +23,7 @@ namespace Yoru
 
 	bool BackEndWindow::Shutdown()
 	{
+		glfwDestroyWindow(m_Window);
 		glfwTerminate();
 
 		return true;
