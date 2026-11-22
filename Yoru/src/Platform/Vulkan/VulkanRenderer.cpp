@@ -203,6 +203,14 @@ namespace Yoru
 		return pipeline;
 	}
 
+	std::unique_ptr<RHIPipeline> VulkanRenderer::CreateComputePipeline(const ComputePipelineDesc& desc)
+	{
+		auto pipeline = std::make_unique<VulkanPipeline>();
+		if (!pipeline->Init(m_VulkanDevice, desc))
+			return nullptr;
+		return pipeline;
+	}
+
 	std::pair<uint32_t, uint32_t> VulkanRenderer::GetRenderExtent() const
 	{
 		VkExtent2D extent = m_VulkanSwapchain->GetExtent();

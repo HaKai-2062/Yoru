@@ -18,6 +18,7 @@ namespace Yoru
 
 		bool Init(VulkanDevice* device, const GraphicsPipelineDesc& desc,
 			VkFormat colorFormat, VkFormat depthFormat);
+		bool Init(VulkanDevice* device, const ComputePipelineDesc& desc);
 
 		virtual PipelineType GetType() const override { return m_Type; }
 		virtual uint32_t GetPushConstantSize() const override { return m_PushConstantSize; }

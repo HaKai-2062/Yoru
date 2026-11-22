@@ -44,9 +44,19 @@ namespace Yoru
 		virtual void BindIndexBuffer(const RHIBuffer& buffer, IndexType type, uint64_t offset = 0) override;
 		virtual void DrawIndexed(uint32_t indexCount, uint32_t instanceCount = 1,
 			uint32_t firstIndex = 0, int32_t vertexOffset = 0, uint32_t firstInstance = 0) override;
+		virtual void DrawIndirect(const RHIBuffer& argsBuffer, uint64_t offset = 0, uint32_t drawCount = 1) override;
+
+		virtual void Dispatch(uint32_t groupsX, uint32_t groupsY = 1, uint32_t groupsZ = 1) override;
+		virtual void DispatchIndirect(const RHIBuffer& argsBuffer, uint64_t offset = 0) override;
+		virtual void FillBuffer(const RHIBuffer& buffer, uint32_t value, uint64_t offset = 0, uint64_t size = 0) override;
+
+		virtual void BufferBarrier(const RHIBuffer& buffer, ResourceUsage from, ResourceUsage to) override;
+		virtual void GlobalBarrier(ResourceUsage from, ResourceUsage to) override;
 
 	private:
 		bool ValidateDraw(const char* function) const;
+		bool ValidateDispatch(const char* function) const;
+		bool ValidateOutsideRendering(const char* function) const;
 
 	private:
 		static inline const char* m_ClassName = "VulkanCommandList";

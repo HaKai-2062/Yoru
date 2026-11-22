@@ -1,0 +1,59 @@
+#version 460
+#extension GL_EXT_buffer_reference : require
+
+// Must match GROUP_SIZE in FluidLayer.cpp
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+
+layout(buffer_reference, std430) writeonly buffer Grid
+{
+	float Values[];
+};
+
+// Must match FieldPushConstants in FluidLayer.h
+layout(push_constant) uniform PushConstants
+{
+	Grid GridBuffer;
+	uint GridSize;
+	float Time;
+	vec3 Origin;
+	float CellSize;
+} u_Push;
+
+void main()
+{
+	uvec3 texelCoord = gl_GlobalInvocationID;
+	uint gridSize = u_Push.GridSize;
+
+	if (any(greaterThanEqual(texelCoord, uvec3(gridSize))))
+		return;
+
+	// Map the sample to a position
+	vec3 worldPos = u_Push.Origin + vec3(texelCoord) * u_Push.CellSize;
+	
+	// Testing metaballs
+	const int totalSpheres = 5;
+	const vec3 center = vec3(2.0f);
+	float t = u_Push.Time;
+
+	// Metaball field: each sphere adds r^2 / d^2, so it's 1 at distance r and falls off smoothly.
+	// Summing them makes nearby spheres blend into one surface. With IsoLevel 0.5 a lone sphere's
+	// surface sits at about 1.4 * r.
+	float density = 0.0f;
+	for (int i = 0; i < totalSpheres; i++)
+	{
+		float phase = float(i) * 1.2566f;		// 2 * pi / 5, spreads them around the orbit
+		float speed = 0.5f + 0.2f * float(i);
+		vec3 offset = vec3(
+			sin(t * speed + phase),
+			0.6f * sin(t * speed * 1.3f + phase * 2.0f),
+			cos(t * speed * 0.8f + phase)) * 0.7f;
+		float radius = 0.3f + 0.05f * float(i % 3);
+
+		vec3 d = worldPos - (center + offset);
+		density += (radius * radius) / max(dot(d, d), 0.0001f);
+	}
+
+	u_Push.GridBuffer.Values[texelCoord.x + 
+		(texelCoord.y * gridSize) + 
+		(texelCoord.z * gridSize * gridSize)] = density;
+}

@@ -1,0 +1,209 @@
+#version 460
+#extension GL_EXT_buffer_reference : require
+
+// Reference: https://paulbourke.net/geometry/polygonise/
+
+// Must match GROUP_SIZE in FluidLayer.cpp
+layout(local_size_x = 4, local_size_y = 4, local_size_z = 4) in;
+
+layout(buffer_reference, std430) readonly buffer Grid
+{
+	float Values[];
+};
+
+// edgeTable[256] followed by triTable[256 * 16]
+layout(buffer_reference, std430) readonly buffer Tables
+{
+	int Values[];
+};
+
+// Must match SurfaceVertex in FluidLayer.h
+struct SurfaceVertex
+{
+	vec4 Position;
+	vec4 Normal;
+};
+
+layout(buffer_reference, std430) writeonly buffer Vertices
+{
+	SurfaceVertex Values[];
+};
+
+// Same layout as VkDrawIndirectCommand / Yoru::DrawIndirectArgs
+layout(buffer_reference, std430) buffer DrawArgs
+{
+	uint VertexCount;
+	uint InstanceCount;
+	uint FirstVertex;
+	uint FirstInstance;
+};
+
+// Must match MarchingCubesPushConstants in FluidLayer.h
+layout(push_constant) uniform PushConstants
+{
+	Grid GridBuffer;
+	Tables TablesBuffer;
+	Vertices VertexBuffer;
+	DrawArgs Args;
+	uint GridSize;
+	float IsoLevel;
+	float CellSize;
+	uint MaxVertices;
+	vec3 Origin;
+} u_Push;
+
+#define tableBuffer u_Push.TablesBuffer.Values
+
+float Sample(uvec3 p)
+{
+	uint n = u_Push.GridSize;
+	return u_Push.GridBuffer.Values[p.x + p.y * n + p.z * n * n];
+}
+
+// Clamped in ivec3 so p - 1 at the border doesn't wrap around as a uint
+float SampleClamped(ivec3 p)
+{
+	return Sample(uvec3(clamp(p, ivec3(0), ivec3(int(u_Push.GridSize) - 1))));
+}
+
+// Density gradient by central differences, points toward increasing density (into the surface)
+vec3 Gradient(uvec3 p)
+{
+	ivec3 q = ivec3(p);
+	return vec3(
+		SampleClamped(q + ivec3(1, 0, 0)) - SampleClamped(q - ivec3(1, 0, 0)),
+		SampleClamped(q + ivec3(0, 1, 0)) - SampleClamped(q - ivec3(0, 1, 0)),
+		SampleClamped(q + ivec3(0, 0, 1)) - SampleClamped(q - ivec3(0, 0, 1)));
+}
+
+// Position and normal use the same t so the normal belongs to the interpolated point
+void VertexInterp(float isoLevel, vec3 p1, vec3 p2, 
+	float valP1, float valP2, vec3 g1, vec3 g2, 
+	out vec3 outPos, out vec3 outNormal)
+{
+	float t = 0.0f;
+	if (abs(valP2 - valP1) >= 0.0001f)
+		t = (isoLevel - valP1) / (valP2 - valP1);
+	
+	outPos = mix(p1, p2, t);
+	// Negated: density grows inward, the normal has to point out
+	outNormal = normalize(-mix(g1, g2, t));
+}
+
+void main()
+{
+	uvec3 cell = gl_GlobalInvocationID;
+	// A cell spans samples [cell, cell + 1], so there are GridSize - 1 cells per axis
+	if (any(greaterThanEqual(cell, uvec3(u_Push.GridSize - 1))))
+		return;
+
+	float isoLevel = u_Push.IsoLevel;
+
+	// Read the 8 corner densities assuming 0 corner is origin
+	uvec3 cornerOffset[8] = {
+		{0, 0, 0},
+		{1, 0, 0},
+		{1, 1, 0},
+		{0, 1, 0},
+		{0, 0, 1},
+		{1, 0, 1},
+		{1, 1, 1},
+		{0, 1, 1},
+	};
+
+	uvec3 cornerPos[8];
+	for (uint i = 0; i < 8; i++)
+	{
+		cornerPos[i] = cell + cornerOffset[i];
+	}
+
+	float cornerSamples[8];
+	for (uint i = 0; i < 8; i++)
+	{
+		cornerSamples[i] = Sample(cornerPos[i]);
+	}
+	
+	// Only cells the surface passes through get here, so the 48 extra samples are only paid where needed
+	vec3 cornerGrad[8];
+	for (uint i = 0; i < 8; i++)
+	{
+		cornerGrad[i] = Gradient(cornerPos[i]);
+	}
+
+	// Determine the index into the edge table which 
+	// tells us which vertices are inside of the surface
+	uint cubeIndex = 0;
+	for (uint i = 0; i < 8; i++)
+	{
+		if (cornerSamples[i] < isoLevel)
+			cubeIndex |= 1 << i;
+	}
+	
+	const int edgeTable = u_Push.TablesBuffer.Values[cubeIndex];
+	// Cube is entirely in/out of the surface
+	if (edgeTable == 0)
+		return;
+
+	// Find the vertices where the surface intersects the cube, normList is indexed like vertList
+	vec3 vertList[12];
+	vec3 normList[12];
+	if ((edgeTable & 1) != 0)
+		VertexInterp(isoLevel, cornerPos[0], cornerPos[1], cornerSamples[0], cornerSamples[1],
+			cornerGrad[0], cornerGrad[1], vertList[0], normList[0]);
+	if ((edgeTable & 2) != 0)
+		VertexInterp(isoLevel, cornerPos[1], cornerPos[2], cornerSamples[1], cornerSamples[2],
+			cornerGrad[1], cornerGrad[2], vertList[1], normList[1]);
+	if ((edgeTable & 4) != 0)
+		VertexInterp(isoLevel, cornerPos[2], cornerPos[3], cornerSamples[2], cornerSamples[3],
+			cornerGrad[2], cornerGrad[3], vertList[2], normList[2]);
+	if ((edgeTable & 8) != 0)
+		VertexInterp(isoLevel, cornerPos[3], cornerPos[0], cornerSamples[3], cornerSamples[0], 
+			cornerGrad[3], cornerGrad[0], vertList[3], normList[3]);
+	if ((edgeTable & 16) != 0)
+		VertexInterp(isoLevel, cornerPos[4], cornerPos[5], cornerSamples[4], cornerSamples[5],
+			cornerGrad[4], cornerGrad[5], vertList[4], normList[4]);
+	if ((edgeTable & 32) != 0)
+		VertexInterp(isoLevel, cornerPos[5], cornerPos[6], cornerSamples[5], cornerSamples[6],
+			cornerGrad[5], cornerGrad[6], vertList[5], normList[5]);
+	if ((edgeTable & 64) != 0)
+		VertexInterp(isoLevel, cornerPos[6], cornerPos[7], cornerSamples[6], cornerSamples[7],
+			cornerGrad[6], cornerGrad[7], vertList[6], normList[6]);
+	if ((edgeTable & 128) != 0)
+		VertexInterp(isoLevel, cornerPos[7], cornerPos[4], cornerSamples[7], cornerSamples[4],
+			cornerGrad[7], cornerGrad[4], vertList[7], normList[7]);
+	if ((edgeTable & 256) != 0)
+		VertexInterp(isoLevel, cornerPos[0], cornerPos[4], cornerSamples[0], cornerSamples[4],
+			cornerGrad[0], cornerGrad[4], vertList[8], normList[8]);
+	if ((edgeTable & 512) != 0)
+		VertexInterp(isoLevel, cornerPos[1], cornerPos[5], cornerSamples[1], cornerSamples[5],
+			cornerGrad[1], cornerGrad[5], vertList[9], normList[9]);
+	if ((edgeTable & 1024) != 0)
+		VertexInterp(isoLevel, cornerPos[2], cornerPos[6], cornerSamples[2], cornerSamples[6],
+			cornerGrad[2], cornerGrad[6], vertList[10], normList[10]);
+	if ((edgeTable & 2048) != 0)
+		VertexInterp(isoLevel, cornerPos[3], cornerPos[7], cornerSamples[3], cornerSamples[7],
+			cornerGrad[3], cornerGrad[7], vertList[11], normList[11]);
+
+	// 256 edges and 16*256 tris so we give 256 edge offset for tris
+	int edgeOffset = 256;
+
+	uint rowStart = uint(edgeOffset) + cubeIndex * 16;
+
+	// Count this cell's vertices first
+	uint vertexCount = 0;
+	while (vertexCount < 15 && tableBuffer[rowStart + vertexCount] != -1)
+		vertexCount += 3;
+	
+	uint base = atomicAdd(u_Push.Args.VertexCount, vertexCount);
+	// The counter still grew, counter.comp clamps it before the draw
+	if (base + vertexCount > u_Push.MaxVertices)
+		return;
+
+	// Build vertix data
+	for (uint v = 0; v < vertexCount; v++)
+	{
+		int triTable = tableBuffer[rowStart + v];
+		u_Push.VertexBuffer.Values[base + v].Position = vec4(u_Push.Origin + vertList[triTable] * u_Push.CellSize, 1.0);
+		u_Push.VertexBuffer.Values[base + v].Normal = vec4(normList[triTable], 0.0);
+	}
+}

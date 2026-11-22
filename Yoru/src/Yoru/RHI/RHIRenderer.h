@@ -28,8 +28,13 @@ namespace Yoru
 
 		// Pipelines are built against the renderer's color/depth targets
 		virtual std::unique_ptr<RHIPipeline> CreateGraphicsPipeline(const GraphicsPipelineDesc& desc) = 0;
+		virtual std::unique_ptr<RHIPipeline> CreateComputePipeline(const ComputePipelineDesc& desc) = 0;
 		virtual std::pair<uint32_t, uint32_t> GetRenderExtent() const = 0;
 		RHIDevice& GetDevice() { return *m_Device; }
+
+		// Buffers the CPU writes every frame need one copy per frame in flight, index them with this
+		virtual uint32_t GetFrameIndex() const = 0;
+		virtual uint32_t GetFramesInFlight() const = 0;
 
 		// Backend side of ImGui, the context itself is owned by ImGuiLayer
 		virtual void InitImGui() = 0;

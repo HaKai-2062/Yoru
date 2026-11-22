@@ -3,7 +3,7 @@
 
 #include "Viewport.h"
 #include "UIPanel.h"
-#include "MeshLayer.h"
+#include "FluidLayer.h"
 
 class Sandbox : public Yoru::Application
 {
@@ -13,6 +13,7 @@ public:
 	{
 		PushLayer(new Viewport());
 		//PushLayer(new MeshLayer());
+		PushLayer(new FluidLayer());
 		PushLayer(new UIPanel());
 	}
 

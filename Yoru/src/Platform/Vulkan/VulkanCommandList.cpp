@@ -6,6 +6,36 @@
 
 namespace Yoru
 {
+	struct VulkanSyncScope
+	{
+		VkPipelineStageFlags2 Stages = VK_PIPELINE_STAGE_2_NONE;
+		VkAccessFlags2 Access = VK_ACCESS_2_NONE;
+	};
+
+	static VulkanSyncScope ToVulkanSync(ResourceUsage usage)
+	{
+		VulkanSyncScope scope{};
+		auto add = [&](ResourceUsage flag, VkPipelineStageFlags2 stage, VkAccessFlags2 access)
+			{
+				if (HasFlag(usage, flag))
+				{
+					scope.Stages |= stage;
+					scope.Access |= access;
+				}
+			};
+
+		add(ResourceUsage::TransferRead, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_READ_BIT);
+		add(ResourceUsage::TransferWrite, VK_PIPELINE_STAGE_2_ALL_TRANSFER_BIT, VK_ACCESS_2_TRANSFER_WRITE_BIT);
+		add(ResourceUsage::ComputeRead, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+		add(ResourceUsage::ComputeWrite, VK_PIPELINE_STAGE_2_COMPUTE_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_WRITE_BIT);
+		add(ResourceUsage::VertexShaderRead, VK_PIPELINE_STAGE_2_VERTEX_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+		add(ResourceUsage::FragmentShaderRead, VK_PIPELINE_STAGE_2_FRAGMENT_SHADER_BIT, VK_ACCESS_2_SHADER_STORAGE_READ_BIT);
+		add(ResourceUsage::IndexRead, VK_PIPELINE_STAGE_2_INDEX_INPUT_BIT, VK_ACCESS_2_INDEX_READ_BIT);
+		add(ResourceUsage::IndirectRead, VK_PIPELINE_STAGE_2_DRAW_INDIRECT_BIT, VK_ACCESS_2_INDIRECT_COMMAND_READ_BIT);
+		add(ResourceUsage::HostRead, VK_PIPELINE_STAGE_2_HOST_BIT, VK_ACCESS_2_HOST_READ_BIT);
+		return scope;
+	}
+
 	void VulkanCommandList::Begin(VkCommandBuffer cmd, const VulkanRenderTarget& target)
 	{
 		m_Cmd = cmd;
@@ -80,7 +110,8 @@ namespace Yoru
 	void VulkanCommandList::BindPipeline(const RHIPipeline& pipeline)
 	{
 		const auto& vkPipeline = static_cast<const VulkanPipeline&>(pipeline);
-		if (m_InsideRendering && vkPipeline.UsesDepthTarget() != m_PassUsesDepth)
+		if (m_InsideRendering && vkPipeline.GetType() == PipelineType::Graphics &&
+			vkPipeline.UsesDepthTarget() != m_PassUsesDepth)
 			Log::Write(LogLevel::ERROR, "{}: Pipeline depth target doesn't match the current pass", m_ClassName);
 
 		vkCmdBindPipeline(m_Cmd, vkPipeline.GetBindPoint(), vkPipeline.GetPipeline());
@@ -136,6 +167,107 @@ namespace Yoru
 		if (!ValidateDraw("DrawIndexed"))
 			return;
 		vkCmdDrawIndexed(m_Cmd, indexCount, instanceCount, firstIndex, vertexOffset, firstInstance);
+	}
+
+	void VulkanCommandList::DrawIndirect(const RHIBuffer& argsBuffer, uint64_t offset, uint32_t drawCount)
+	{
+		if (!ValidateDraw("DrawIndirect"))
+			return;
+		const auto& vkBuffer = static_cast<const VulkanBuffer&>(argsBuffer);
+		vkCmdDrawIndirect(m_Cmd, vkBuffer.GetBuffer(), offset, drawCount, sizeof(DrawIndirectArgs));
+	}
+
+	void VulkanCommandList::Dispatch(uint32_t groupsX, uint32_t groupsY, uint32_t groupsZ)
+	{
+		if (!ValidateDispatch("Dispatch"))
+			return;
+		vkCmdDispatch(m_Cmd, groupsX, groupsY, groupsZ);
+	}
+
+	void VulkanCommandList::DispatchIndirect(const RHIBuffer& argsBuffer, uint64_t offset)
+	{
+		if (!ValidateDispatch("DispatchIndirect"))
+			return;
+		const auto& vkBuffer = static_cast<const VulkanBuffer&>(argsBuffer);
+		vkCmdDispatchIndirect(m_Cmd, vkBuffer.GetBuffer(), offset);
+	}
+
+	void VulkanCommandList::FillBuffer(const RHIBuffer& buffer, uint32_t value, uint64_t offset, uint64_t size)
+	{
+		if (!ValidateOutsideRendering("FillBuffer"))
+			return;
+		const auto& vkBuffer = static_cast<const VulkanBuffer&>(buffer);
+		vkCmdFillBuffer(m_Cmd, vkBuffer.GetBuffer(), offset, size == 0 ? VK_WHOLE_SIZE : size, value);
+	}
+
+	void VulkanCommandList::BufferBarrier(const RHIBuffer& buffer, ResourceUsage from, ResourceUsage to)
+	{
+		if (!ValidateOutsideRendering("BufferBarrier"))
+			return;
+
+		const VulkanSyncScope src = ToVulkanSync(from);
+		const VulkanSyncScope dst = ToVulkanSync(to);
+
+		VkBufferMemoryBarrier2 barrier{};
+		barrier.sType = VK_STRUCTURE_TYPE_BUFFER_MEMORY_BARRIER_2;
+		barrier.srcStageMask = src.Stages;
+		barrier.srcAccessMask = src.Access;
+		barrier.dstStageMask = dst.Stages;
+		barrier.dstAccessMask = dst.Access;
+		barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+		barrier.buffer = static_cast<const VulkanBuffer&>(buffer).GetBuffer();
+		barrier.size = VK_WHOLE_SIZE;
+
+		VkDependencyInfo depInfo{};
+		depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+		depInfo.bufferMemoryBarrierCount = 1;
+		depInfo.pBufferMemoryBarriers = &barrier;
+		vkCmdPipelineBarrier2(m_Cmd, &depInfo);
+	}
+
+	void VulkanCommandList::GlobalBarrier(ResourceUsage from, ResourceUsage to)
+	{
+		if (!ValidateOutsideRendering("GlobalBarrier"))
+			return;
+
+		const VulkanSyncScope src = ToVulkanSync(from);
+		const VulkanSyncScope dst = ToVulkanSync(to);
+
+		VkMemoryBarrier2 barrier{};
+		barrier.sType = VK_STRUCTURE_TYPE_MEMORY_BARRIER_2;
+		barrier.srcStageMask = src.Stages;
+		barrier.srcAccessMask = src.Access;
+		barrier.dstStageMask = dst.Stages;
+		barrier.dstAccessMask = dst.Access;
+
+		VkDependencyInfo depInfo{};
+		depInfo.sType = VK_STRUCTURE_TYPE_DEPENDENCY_INFO;
+		depInfo.memoryBarrierCount = 1;
+		depInfo.pMemoryBarriers = &barrier;
+		vkCmdPipelineBarrier2(m_Cmd, &depInfo);
+	}
+
+	bool VulkanCommandList::ValidateDispatch(const char* function) const
+	{
+		if (!ValidateOutsideRendering(function))
+			return false;
+		if (!m_BoundPipeline || m_BoundPipeline->GetType() != PipelineType::Compute)
+		{
+			Log::Write(LogLevel::ERROR, "{}: {} needs a bound compute pipeline", m_ClassName, function);
+			return false;
+		}
+		return true;
+	}
+
+	bool VulkanCommandList::ValidateOutsideRendering(const char* function) const
+	{
+		if (m_InsideRendering)
+		{
+			Log::Write(LogLevel::ERROR, "{}: {} isn't allowed inside BeginRendering/EndRendering", m_ClassName, function);
+			return false;
+		}
+		return true;
 	}
 
 	bool VulkanCommandList::ValidateDraw(const char* function) const

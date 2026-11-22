@@ -1,0 +1,38 @@
+#version 460
+#extension GL_EXT_buffer_reference : require
+
+// One thread, runs between marching cubes and the draw
+layout(local_size_x = 1) in;
+
+// Same layout as VkDrawIndirectCommand / Yoru::DrawIndirectArgs
+layout(buffer_reference, std430) buffer DrawArgs
+{
+	uint VertexCount;
+	uint InstanceCount;
+	uint FirstVertex;
+	uint FirstInstance;
+};
+
+layout(buffer_reference, std430) writeonly buffer Readback
+{
+	uint VertexCount;
+};
+
+// Must match CounterPushConstants in FluidLayer.h
+layout(push_constant) uniform PushConstants
+{
+	DrawArgs Args;
+	Readback Output;
+	uint MaxVertices;
+} u_Push;
+
+void main()
+{
+	uint count = u_Push.Args.VertexCount;
+
+	// Unclamped, so the CPU can tell when the budget was exceeded
+	u_Push.Output.VertexCount = count;
+
+	// atomicAdd keeps counting past the budget, the draw must never read past the vertex buffer
+	u_Push.Args.VertexCount = min(count, u_Push.MaxVertices);
+}

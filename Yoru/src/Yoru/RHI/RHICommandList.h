@@ -35,5 +35,18 @@ namespace Yoru
 		virtual void BindIndexBuffer(const RHIBuffer& buffer, IndexType type, uint64_t offset = 0) = 0;
 		virtual void DrawIndexed(uint32_t indexCount, uint32_t instanceCount = 1,
 			uint32_t firstIndex = 0, int32_t vertexOffset = 0, uint32_t firstInstance = 0) = 0;
+		// Reads DrawIndirectArgs from the buffer, which needs BufferUsage::Indirect
+		virtual void DrawIndirect(const RHIBuffer& argsBuffer, uint64_t offset = 0, uint32_t drawCount = 1) = 0;
+
+		// Compute and transfer commands are only valid outside BeginRendering/EndRendering
+		virtual void Dispatch(uint32_t groupsX, uint32_t groupsY = 1, uint32_t groupsZ = 1) = 0;
+		virtual void DispatchIndirect(const RHIBuffer& argsBuffer, uint64_t offset = 0) = 0;
+		// Offset and size must be multiples of 4, size 0 fills to the end of the buffer
+		virtual void FillBuffer(const RHIBuffer& buffer, uint32_t value, uint64_t offset = 0, uint64_t size = 0) = 0;
+
+		// Makes writes from one usage visible to the next, e.g. ComputeWrite -> VertexShaderRead
+		virtual void BufferBarrier(const RHIBuffer& buffer, ResourceUsage from, ResourceUsage to) = 0;
+		// Same for every buffer at once
+		virtual void GlobalBarrier(ResourceUsage from, ResourceUsage to) = 0;
 	};
 }

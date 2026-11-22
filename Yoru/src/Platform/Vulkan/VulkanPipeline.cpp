@@ -51,6 +51,8 @@ namespace Yoru
 			return false;
 		}
 
+		m_Type = PipelineType::Graphics;
+		m_BindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
 		m_PushConstantSize = desc.PushConstantSize;
 		m_UseDepthTarget = desc.UseDepthTarget;
 		m_PushConstantStages = VK_SHADER_STAGE_VERTEX_BIT | VK_SHADER_STAGE_FRAGMENT_BIT;
@@ -152,6 +154,59 @@ namespace Yoru
 		if (vkCreateGraphicsPipelines(vkDevice, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &m_Pipeline) != VK_SUCCESS)
 		{
 			Log::Write(LogLevel::FATAL, "{}: Failed to create graphics pipeline", m_ClassName);
+			return false;
+		}
+
+		return true;
+	}
+
+	bool VulkanPipeline::Init(VulkanDevice* device, const ComputePipelineDesc& desc)
+	{
+		m_Device = device;
+		VkDevice vkDevice = m_Device->GetDevice();
+
+		if (!desc.ComputeShader)
+		{
+			Log::Write(LogLevel::ERROR, "{}: Compute pipeline needs a compute shader", m_ClassName);
+			return false;
+		}
+
+		m_Type = PipelineType::Compute;
+		m_BindPoint = VK_PIPELINE_BIND_POINT_COMPUTE;
+		m_PushConstantSize = desc.PushConstantSize;
+		m_UseDepthTarget = false;
+		m_PushConstantStages = VK_SHADER_STAGE_COMPUTE_BIT;
+
+		VkPushConstantRange pushRange{};
+		pushRange.stageFlags = m_PushConstantStages;
+		pushRange.size = m_PushConstantSize;
+
+		VkPipelineLayoutCreateInfo layoutInfo = VkInit::pipelineLayoutCreateInfo();
+		if (m_PushConstantSize > 0)
+		{
+			layoutInfo.pushConstantRangeCount = 1;
+			layoutInfo.pPushConstantRanges = &pushRange;
+		}
+
+		if (vkCreatePipelineLayout(vkDevice, &layoutInfo, nullptr, &m_Layout) != VK_SUCCESS)
+		{
+			Log::Write(LogLevel::FATAL, "{}: Failed to create pipeline layout", m_ClassName);
+			return false;
+		}
+
+		const auto* computeShader = static_cast<const VulkanShader*>(desc.ComputeShader);
+		VkPipelineShaderStageCreateInfo shaderStage =
+			VkInit::pipelineShaderStageCreateInfo(VK_SHADER_STAGE_COMPUTE_BIT, computeShader->GetModule());
+
+		VkComputePipelineCreateInfo computePipelineCreateInfo{};
+		computePipelineCreateInfo.sType = VK_STRUCTURE_TYPE_COMPUTE_PIPELINE_CREATE_INFO;
+		computePipelineCreateInfo.pNext = nullptr;
+		computePipelineCreateInfo.layout = m_Layout;
+		computePipelineCreateInfo.stage = shaderStage;
+
+		if (vkCreateComputePipelines(vkDevice, VK_NULL_HANDLE, 1, &computePipelineCreateInfo, nullptr, &m_Pipeline) != VK_SUCCESS)
+		{
+			Log::Write(LogLevel::FATAL, "{}: Failed to create compute pipeline", m_ClassName);
 			return false;
 		}
 

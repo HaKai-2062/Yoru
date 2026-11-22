@@ -25,7 +25,10 @@ namespace Yoru
 		virtual void WaitIdle() override;
 
 		virtual std::unique_ptr<RHIPipeline> CreateGraphicsPipeline(const GraphicsPipelineDesc& desc) override;
+		virtual std::unique_ptr<RHIPipeline> CreateComputePipeline(const ComputePipelineDesc& desc) override;
 		virtual std::pair<uint32_t, uint32_t> GetRenderExtent() const override;
+		virtual uint32_t GetFrameIndex() const override { return static_cast<uint32_t>(m_FrameIndex % MAX_FRAMES_IN_FLIGHT); }
+		virtual uint32_t GetFramesInFlight() const override { return MAX_FRAMES_IN_FLIGHT; }
 
 		virtual void InitImGui() override;
 		virtual void ShutdownImGui() override;
